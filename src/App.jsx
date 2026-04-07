@@ -13,16 +13,20 @@ function lsGet(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):nul
 const CATS=[
   {id:"s0_25",label:"Socio 0–25"},{id:"s26_34",label:"Socio 26–34"},
   {id:"s35_54",label:"Socio 35–54"},{id:"s55_59",label:"Socio 55–59"},
-  {id:"s60plus",label:"Socio 60+"},{id:"h1",label:"Hijo 1 (H1)"},{id:"h2plus",label:"Hijo 2+ (H2+)"},
+  {id:"s60plus",label:"Socio 60+"},{id:"h1",label:"H1"},{id:"h2plus",label:"H2+"},
 ];
 const EMPTY_P={s0_25:0,s26_34:0,s35_54:0,s55_59:0,s60plus:0,h1:0,h2plus:0};
+const PLAN_IDS=["4500_PYME","6500_PYME","8500_PYME"];
+const EMPTY_PLAN={prices:{...EMPTY_P},costosCerrados:{...EMPTY_P},costosAbiertos:{...EMPTY_P}};
+const DEFAULT_PLANES=Object.fromEntries(PLAN_IDS.map(id=>[id,JSON.parse(JSON.stringify(EMPTY_PLAN))]));
 
 function catAge(a){if(a<=25)return"s0_25";if(a<=34)return"s26_34";if(a<=54)return"s35_54";if(a<=59)return"s55_59";return"s60plus";}
 function cfColor(cf){return cf<=70?"#16A34A":cf<=82?"#CA8A04":"#DC2626";}
 function cfBg(cf){return cf<=70?"#D1FAE5":cf<=82?"#FEF3C7":"#FEF2F2";}
 function cfLabel(cf){return cf<=70?"Excelente":cf<=82?"Aceptable":"Alto";}
 
-function calcBD(emps,map,prices,cc,ca){
+function calcGroupBD(emps,map,planData){
+  const {prices,costosCerrados,costosAbiertos}=planData;
   const c={};CATS.forEach(x=>{c[x.id]=0;});
   emps.forEach(e=>{
     const ta=parseInt(e[map.titAge]);if(!isNaN(ta))c[catAge(ta)]++;
@@ -32,13 +36,13 @@ function calcBD(emps,map,prices,cc,ca){
   });
   const rows=CATS.map(x=>{
     const n=c[x.id],precio=prices[x.id]||0;
-    const cCerrado=cc[x.id]||0,cAbierto=ca[x.id]||0,costoTotal=cCerrado+cAbierto;
-    const facturacion=n*precio,costo=n*costoTotal,cf=facturacion>0?costo/facturacion*100:0;
-    return{...x,count:n,precio,cCerrado,cAbierto,costoTotal,facturacion,costo,cf};
+    const cC=costosCerrados[x.id]||0,cA=costosAbiertos[x.id]||0,ct=cC+cA;
+    const fac=n*precio,cos=n*ct,cf=fac>0?cos/fac*100:0;
+    return{...x,count:n,precio,cC,cA,ct,fac,cos,cf};
   });
-  const totalFac=rows.reduce((a,r)=>a+r.facturacion,0);
-  const totalCosto=rows.reduce((a,r)=>a+r.costo,0);
-  return{rows,totalFac,totalCosto,cfTotal:totalFac>0?totalCosto/totalFac*100:0};
+  const totalFac=rows.reduce((a,r)=>a+r.fac,0);
+  const totalCosto=rows.reduce((a,r)=>a+r.cos,0);
+  return{rows,totalFac,totalCosto,cfTotal:totalFac>0?totalCosto/totalFac*100:0,totalSocios:emps.length};
 }
 
 const fmt=n=>(+n).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -47,8 +51,8 @@ function exJSON(t){const m=t.match(/```json\s*([\s\S]*?)```/);if(m){try{return J
 function stripJ(t){return t.replace(/```json[\s\S]*?```/g,"").replace(/\{[^}]*\}/g,"").trim();}
 
 const card=(x={})=>({background:"#fff",border:`1px solid ${BORDER}`,borderRadius:12,padding:"1.5rem",...x});
-const TH=(x={})=>({padding:"10px 14px",fontWeight:600,fontSize:11,color:"#6B7280",borderBottom:`1px solid ${BORDER}`,textAlign:"right",background:GRAY,letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:FONT,...x});
-const TD=(x={})=>({padding:"10px 14px",borderBottom:`1px solid ${BORDER}`,fontSize:13,fontFamily:FONT,...x});
+const TH=(x={})=>({padding:"9px 12px",fontWeight:600,fontSize:11,color:"#6B7280",borderBottom:`1px solid ${BORDER}`,textAlign:"right",background:GRAY,letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:FONT,whiteSpace:"nowrap",...x});
+const TD=(x={})=>({padding:"9px 12px",borderBottom:`1px solid ${BORDER}`,fontSize:13,fontFamily:FONT,...x});
 const badge=(color,bg)=>({display:"inline-block",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,color,background:bg,fontFamily:FONT});
 const btnP={background:BLUE,color:"#fff",border:"none",borderRadius:8,padding:"10px 20px",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:FONT};
 const btnS={background:"#fff",color:BLUE,border:`1px solid ${BORDER}`,borderRadius:8,padding:"10px 20px",fontWeight:500,fontSize:13,cursor:"pointer",fontFamily:FONT};
@@ -57,66 +61,115 @@ const inp={border:`1px solid ${BORDER}`,borderRadius:8,padding:"8px 12px",fontSi
 function downloadTemplate(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([
-    ["NOMBRE","EDAD_TITULAR","EDAD_CONYUGE","HIJOS_MENORES_25","HIJOS_MAYORES_25"],
-    ["Juan Pérez",35,33,2,0],["María García",28,0,0,0],["Carlos López",52,49,1,1],["Ana Martínez",61,58,0,2],
+    ["NOMBRE","EDAD_TITULAR","EDAD_CONYUGE","HIJOS_MENORES_25","HIJOS_MAYORES_25","PLAN_ACTUAL"],
+    ["Juan Pérez",35,33,2,0,"Osde 210"],
+    ["María García",28,0,0,0,"Osde 310"],
+    ["Carlos López",52,49,1,1,"Galeno ORO 210"],
+    ["Ana Martínez",61,58,0,2,"4500_PYME"],
   ]);
-  ws["!cols"]=[{wch:20},{wch:14},{wch:14},{wch:18},{wch:18}];
+  ws["!cols"]=[{wch:20},{wch:14},{wch:14},{wch:18},{wch:18},{wch:16}];
   XLSX.utils.book_append_sheet(wb,ws,"Nómina");
   XLSX.writeFile(wb,"template_nomina_omint.xlsx");
 }
 
-function exportXLS(bd,empresa,emps,vp,cc,ca){
+function exportXLS(planResults,empresa,emps,planes){
   const wb=XLSX.utils.book_new();
   const today=new Date().toLocaleDateString("es-AR");
+  const totalFac=planResults.reduce((a,r)=>a+r.bd.totalFac,0);
+  const totalCosto=planResults.reduce((a,r)=>a+r.bd.totalCosto,0);
+  const cfTotal=totalFac>0?totalCosto/totalFac*100:0;
   const ws1=XLSX.utils.aoa_to_sheet([
     ["GRUPO OMINT"],[""],["COTIZACIÓN CORPORATIVA"],[""],
-    ["Empresa:",empresa||"—"],["Fecha:",today],["Socios:",emps.length],[""],
+    ["Empresa:",empresa||"—"],["Fecha:",today],["Socios totales:",emps.length],[""],
     ["RESUMEN EJECUTIVO"],
-    ["Facturación mensual estimada:","$"+fmt(bd.totalFac)],
-    ["Costo mensual estimado:","$"+fmt(bd.totalCosto)],
-    ["Costo / Facturación:",bd.cfTotal.toFixed(1)+"%"],
-    ["Calificación:",cfLabel(bd.cfTotal)],[""],
-    ["Categorías cotizadas:",bd.rows.filter(r=>r.count>0).length+" de "+CATS.length],
-    ["Rango C/F saludable:","≤ 82%"],
+    ["Facturación total estimada:","$"+fmt(totalFac)],
+    ["Costo total estimado:","$"+fmt(totalCosto)],
+    ["C/F global:",cfTotal.toFixed(1)+"%"],
+    ["Calificación:",cfLabel(cfTotal)],
   ]);
   ws1["!cols"]=[{wch:30},{wch:25}];
   XLSX.utils.book_append_sheet(wb,ws1,"Portada");
-  const r2=[["Categoría","Cantidad","Precio ($)","Costo Cerrado ($)","Costo Abierto ($)","Costo Total ($)","Facturación ($)","Costo ($)","C/F (%)","Calificación"]];
-  bd.rows.forEach(r=>{r2.push([r.label,r.count,+r.precio.toFixed(2),+r.cCerrado.toFixed(2),+r.cAbierto.toFixed(2),+r.costoTotal.toFixed(2),+r.facturacion.toFixed(2),+r.costo.toFixed(2),r.facturacion>0?+(r.cf.toFixed(1)):"-",r.facturacion>0?cfLabel(r.cf):"-"]);});
-  r2.push([],[`TOTALES`,emps.length,"","","","",+bd.totalFac.toFixed(2),+bd.totalCosto.toFixed(2),+bd.cfTotal.toFixed(1)+"%",cfLabel(bd.cfTotal)]);
-  const ws2=XLSX.utils.aoa_to_sheet(r2);ws2["!cols"]=[{wch:18},{wch:10},{wch:12},{wch:16},{wch:16},{wch:14},{wch:14},{wch:12},{wch:10},{wch:14}];
-  XLSX.utils.book_append_sheet(wb,ws2,"Desglose Cotización");
-  const r3=[["Categoría","Precio de Lista ($)","Costo Cerrado ($)","Costo Abierto ($)","Costo Total ($)","C/F Unitario (%)"]];
-  CATS.forEach(c=>{const p=vp?.[c.id]||0,ccc=cc?.[c.id]||0,cca=ca?.[c.id]||0,ct=ccc+cca,cf=p>0?(ct/p*100):0;r3.push([c.label,+p.toFixed(2),+ccc.toFixed(2),+cca.toFixed(2),+ct.toFixed(2),p>0?+(cf.toFixed(1)):"-"]);});
-  const ws3=XLSX.utils.aoa_to_sheet(r3);ws3["!cols"]=[{wch:18},{wch:16},{wch:16},{wch:16},{wch:14},{wch:16}];
-  XLSX.utils.book_append_sheet(wb,ws3,"Tarifario Vigente");
+  planResults.forEach(({planId,bd,mapping})=>{
+    const r=[["Plan Omint:",planId],["Socios:",bd.totalSocios],[""],
+      ["Categoría","N°","Precio","C.Cerrado","C.Abierto","Facturación","Costo","C/F","Calificación"]];
+    bd.rows.forEach(row=>{r.push([row.label,row.count,+row.precio.toFixed(2),+row.cC.toFixed(2),+row.cA.toFixed(2),+row.fac.toFixed(2),+row.cos.toFixed(2),row.fac>0?+(row.cf.toFixed(1)):"-",row.fac>0?cfLabel(row.cf):"-"]);});
+    r.push([],["TOTAL",bd.totalSocios,"","","",+bd.totalFac.toFixed(2),+bd.totalCosto.toFixed(2),+bd.cfTotal.toFixed(1)+"%",cfLabel(bd.cfTotal)]);
+    if(mapping&&mapping.length>0){r.push([],["Planes mapeados desde:"]);mapping.forEach(m=>r.push([`  ${m.from}`,"→",m.to]));}
+    const ws=XLSX.utils.aoa_to_sheet(r);ws["!cols"]=[{wch:18},{wch:8},{wch:12},{wch:14},{wch:14},{wch:14},{wch:12},{wch:8},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,ws,planId.replace(/[^a-zA-Z0-9_]/g,"_"));
+  });
   if(emps&&emps.length>0)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(emps),"Nómina");
   XLSX.writeFile(wb,`Cotizacion_${empresa||"empresa"}_${today.replace(/\//g,"-")}.xlsx`);
 }
 
-function TablaEditable({title,subtitle,values,onSave,colorAccent}){
-  const [loc,setLoc]=useState({...EMPTY_P,...(values||{})});
+/* ══ PLANES VIGENTES ══ */
+function PlanesVigentes({planes,onSave}){
+  const [loc,setLoc]=useState(planes||JSON.parse(JSON.stringify(DEFAULT_PLANES)));
+  const [selPlan,setSelPlan]=useState(PLAN_IDS[0]);
   const [ok,setOk]=useState(false);
-  useEffect(()=>{setLoc({...EMPTY_P,...(values||{})});},[values]);
-  const ac=colorAccent||BLUE;
+  useEffect(()=>{setLoc(planes||JSON.parse(JSON.stringify(DEFAULT_PLANES)));},[planes]);
+  const p=loc[selPlan]||JSON.parse(JSON.stringify(EMPTY_PLAN));
+
+  function upd(type,catId,val){
+    setLoc(prev=>{
+      const n=JSON.parse(JSON.stringify(prev));
+      if(!n[selPlan])n[selPlan]=JSON.parse(JSON.stringify(EMPTY_PLAN));
+      n[selPlan][type][catId]=parseFloat(val)||0;
+      return n;
+    });
+  }
+
   return(
     <div>
-      <h2 style={{fontSize:22,fontWeight:700,color:ac,marginBottom:4,fontFamily:FONT}}>{title}</h2>
-      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>{subtitle}</p>
+      <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Planes Vigentes</h2>
+      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Configurá precios y costos de cada plan. Estos datos se usan automáticamente en el cotizador.</p>
+      <div style={{display:"flex",gap:8,marginBottom:"1.5rem"}}>
+        {PLAN_IDS.map(id=>(
+          <button key={id} onClick={()=>setSelPlan(id)} style={{...( selPlan===id?btnP:btnS),padding:"8px 16px",fontSize:13}}>
+            {id}
+          </button>
+        ))}
+      </div>
       <div style={card()}>
-        <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",maxWidth:520}}>
-          <thead><tr><th style={TH({textAlign:"left"})}>Categoría</th><th style={TH()}>Monto mensual por socio ($)</th></tr></thead>
-          <tbody>{CATS.map(c=>(
-            <tr key={c.id}>
-              <td style={TD({fontWeight:500})}>{c.label}</td>
-              <td style={TD({textAlign:"right"})}>
-                <input type="number" min={0} value={loc[c.id]||0} onChange={e=>setLoc(p=>({...p,[c.id]:parseFloat(e.target.value)||0}))} style={{...inp,width:180,textAlign:"right"}}/>
-              </td>
-            </tr>
-          ))}</tbody>
-        </table>
+        <div style={{overflowX:"auto"}}>
+          <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",minWidth:580}}>
+            <thead>
+              <tr>
+                <th style={TH({textAlign:"left",fontSize:12})}>Categoría</th>
+                <th style={TH({fontSize:12})}>Precio ($)</th>
+                <th style={TH({fontSize:12,color:"#7C3AED"})}>Costo Cerrado ($)</th>
+                <th style={TH({fontSize:12,color:"#B45309"})}>Costo Abierto ($)</th>
+                <th style={TH({fontSize:12})}>C/F unitario</th>
+              </tr>
+            </thead>
+            <tbody>{CATS.map(c=>{
+              const pr=p.prices[c.id]||0;
+              const cc=p.costosCerrados[c.id]||0;
+              const ca=p.costosAbiertos[c.id]||0;
+              const ct=cc+ca;
+              const cf=pr>0?(ct/pr*100):0;
+              return(
+                <tr key={c.id}>
+                  <td style={TD({fontWeight:500})}>{c.label}</td>
+                  <td style={TD({textAlign:"right"})}>
+                    <input type="number" min={0} value={pr} onChange={e=>upd("prices",c.id,e.target.value)} style={{...inp,width:140,textAlign:"right"}}/>
+                  </td>
+                  <td style={TD({textAlign:"right"})}>
+                    <input type="number" min={0} value={cc} onChange={e=>upd("costosCerrados",c.id,e.target.value)} style={{...inp,width:140,textAlign:"right"}}/>
+                  </td>
+                  <td style={TD({textAlign:"right"})}>
+                    <input type="number" min={0} value={ca} onChange={e=>upd("costosAbiertos",c.id,e.target.value)} style={{...inp,width:140,textAlign:"right"}}/>
+                  </td>
+                  <td style={TD({textAlign:"right"})}>
+                    {pr>0&&<span style={{...badge(cfColor(cf),cfBg(cf)),fontSize:11}}>{cf.toFixed(0)}%</span>}
+                  </td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
         <div style={{marginTop:"1.25rem",display:"flex",alignItems:"center",gap:12}}>
-          <button onClick={()=>{onSave({...loc});setOk(true);setTimeout(()=>setOk(false),2500);}} style={{...btnP,background:ac}}>{ok?"✓ Guardado":"Guardar"}</button>
+          <button onClick={()=>{onSave({...loc});setOk(true);setTimeout(()=>setOk(false),2500);}} style={btnP}>{ok?"✓ Guardado":"Guardar planes"}</button>
           {ok&&<span style={{fontSize:13,color:"#16a34a",fontFamily:FONT}}>Guardado correctamente</span>}
         </div>
       </div>
@@ -124,6 +177,7 @@ function TablaEditable({title,subtitle,values,onSave,colorAccent}){
   );
 }
 
+/* ══ HISTORIAL ══ */
 function Historial({quotes,onUpdate}){
   const [open,setOpen]=useState({});
   const groups={};
@@ -183,75 +237,32 @@ function Historial({quotes,onUpdate}){
   );
 }
 
-function CarteraTable({quotes,title,emptyMsg,onUpdate}){
-  const totalFac=quotes.reduce((a,q)=>a+(q.totalFac||q.total||0),0);
-  const totalCosto=quotes.reduce((a,q)=>a+(q.totalCosto||0),0);
-  const cfGlobal=totalFac>0?totalCosto/totalFac*100:0;
-  return(
-    <div>
-      <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:"1.25rem",fontFamily:FONT}}>{title}</h2>
-      {quotes.length>0&&(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:"1.5rem"}}>
-          {[{l:"Facturación total",v:`$${fmt(totalFac)}`,bg:BLUE,white:true},{l:"Costo total",v:`$${fmt(totalCosto)}`,c:"#DC2626",bg:"#FEF2F2"},{l:"C/F global",v:`${cfGlobal.toFixed(1)}%`,sub:cfLabel(cfGlobal),c:cfColor(cfGlobal),bg:cfBg(cfGlobal)}].map(c=>(
-            <div key={c.l} style={{background:c.bg,borderRadius:12,padding:"1rem 1.25rem",border:`1px solid ${BORDER}`}}>
-              <p style={{fontSize:11,fontWeight:600,color:c.white?"rgba(255,255,255,0.7)":"#6B7280",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>{c.l}</p>
-              <p style={{fontSize:20,fontWeight:700,color:c.white?"#fff":c.c,fontFamily:FONT}}>{c.v}</p>
-              {c.sub&&<p style={{fontSize:11,color:c.c,marginTop:2,fontWeight:500,fontFamily:FONT}}>{c.sub}</p>}
-            </div>
-          ))}
-        </div>
-      )}
-      {quotes.length===0
-        ?<div style={{...card(),textAlign:"center",padding:"3rem",color:"#9CA3AF"}}><div style={{fontSize:40,marginBottom:12}}>📋</div><p style={{fontFamily:FONT}}>{emptyMsg}</p></div>
-        :<div style={card()}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr>{["Empresa","Socios","Facturación","Costo","C/F","Estado",""].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
-            <tbody>{quotes.map(q=>{
-              const cf=q.cfTotal||0;
-              return(
-                <tr key={q.id}>
-                  <td style={TD({fontWeight:600,color:BLUE})}>{q.empresa||"Sin nombre"}</td>
-                  <td style={TD({textAlign:"right",color:"#6B7280"})}>{q.socios||"—"}</td>
-                  <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(q.totalFac||q.total||0)}</td>
-                  <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(q.totalCosto||0)}</td>
-                  <td style={TD({textAlign:"right"})}>{cf>0&&<span style={{...badge(cfColor(cf),cfBg(cf)),minWidth:52,display:"inline-block",textAlign:"center"}}>{cf.toFixed(1)}%</span>}</td>
-                  <td style={TD({textAlign:"right"})}><span style={badge(q.status==="cerrado"?"#065F46":"#92400E",q.status==="cerrado"?"#D1FAE5":"#FEF3C7")}>{q.status==="cerrado"?"Cerrado":"Abierto"}</span></td>
-                  <td style={TD({textAlign:"right"})}>{q.status==="abierto"&&onUpdate&&<button onClick={()=>onUpdate(q.id,{status:"cerrado"})} style={{fontSize:11,padding:"4px 10px",border:`1px solid ${BORDER}`,borderRadius:6,cursor:"pointer",background:"#fff",color:BLUE,fontWeight:500,fontFamily:FONT}}>Cerrar</button>}</td>
-                </tr>
-              );
-            })}</tbody>
-          </table>
-        </div>
-      }
-    </div>
-  );
-}
-
+/* ══ CONFIGURACIÓN ══ */
 function Configuracion({apiKey,onSave}){
   const [k,setK]=useState(apiKey||"");const[ok,setOk]=useState(false);
   return(
     <div>
       <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:6,fontFamily:FONT}}>Configuración</h2>
-      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>La API key se guarda localmente y se usa solo para el chat de negociación de precios.</p>
+      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>La API key se guarda localmente y se usa solo para el ajuste de precios con IA.</p>
       <div style={card()}>
         <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>API Key de OpenRouter</label>
         <input type="password" value={k} onChange={e=>setK(e.target.value)} placeholder="sk-or-..." style={{...inp,maxWidth:480,marginBottom:12}}/>
-        <p style={{fontSize:11,color:"#9CA3AF",marginBottom:16,fontFamily:FONT}}>
-          Conseguila gratis en <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer" style={{color:BLUE}}>openrouter.ai</a> → Management Keys → Create key
-        </p>
+        <p style={{fontSize:11,color:"#9CA3AF",marginBottom:16,fontFamily:FONT}}>Conseguila gratis en <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer" style={{color:BLUE}}>openrouter.ai</a> → Management Keys</p>
         <button onClick={()=>{onSave(k);setOk(true);setTimeout(()=>setOk(false),2500);}} style={btnP}>{ok?"✓ Guardado":"Guardar API key"}</button>
       </div>
     </div>
   );
 }
 
-function Cotizador({vigentePrices,costosCerrados,costosAbiertos,onSaveQuote,knownEmpresas,apiKey}){
+/* ══ COTIZADOR ══ */
+function Cotizador({planes,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
   const [cols,setCols]=useState([]);
-  const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:""});
-  const [prices,setPrices]=useState({...EMPTY_P});
-  const [adjPrices,setAdjPrices]=useState({});
+  const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:""});
+  // mapeo de planes externos a planes Omint
+  const [planMapping,setPlanMapping]=useState({});// {planExterno: planOmint|""}
+  const [adjPrices,setAdjPrices]=useState({});// {planId: {catId: price}}
   const [empresa,setEmpresa]=useState("");
   const [showSug,setShowSug]=useState(false);
   const [chat,setChat]=useState([]);
@@ -261,11 +272,49 @@ function Cotizador({vigentePrices,costosCerrados,costosAbiertos,onSaveQuote,know
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
-  const effP={};CATS.forEach(c=>{effP[c.id]=adjPrices[c.id]!==undefined?adjPrices[c.id]:(prices[c.id]||0);});
-  const cc=costosCerrados||EMPTY_P,ca=costosAbiertos||EMPTY_P;
-  const bd=emps&&map.titAge&&map.ku?calcBD(emps,map,effP,cc,ca):null;
-  const suggestions=empresa.trim().length>0?knownEmpresas.filter(e=>e.toLowerCase().includes(empresa.toLowerCase())&&e.toLowerCase()!==empresa.toLowerCase()):[];
-  const isKnown=knownEmpresas.includes(empresa.trim());
+  // Planes externos únicos detectados en la nómina
+  const externalPlans=emps&&map.planCol?[...new Set(emps.map(e=>e[map.planCol]).filter(Boolean))]:[];
+  const isOmintPlan=p=>PLAN_IDS.includes(p);
+
+  // Construir grupos: {planId: [emps]}
+  function buildGroups(){
+    if(!emps||!map.titAge||!map.ku)return[];
+    const groups={};
+    emps.forEach(e=>{
+      let planId="sin_plan";
+      if(map.planCol&&e[map.planCol]){
+        const ext=e[map.planCol];
+        if(isOmintPlan(ext))planId=ext;
+        else planId=planMapping[ext]||"sin_plan";
+      }
+      if(!groups[planId])groups[planId]=[];
+      groups[planId].push(e);
+    });
+    return Object.entries(groups).filter(([k])=>k!=="sin_plan"&&planes[k]).map(([planId,empList])=>({planId,empList}));
+  }
+
+  const groups=buildGroups();
+
+  // Resultados por plan con precios ajustados
+  function buildResults(){
+    return groups.map(({planId,empList})=>{
+      const base=planes[planId]||JSON.parse(JSON.stringify(EMPTY_PLAN));
+      const adjForPlan=adjPrices[planId]||{};
+      const adjPlanData={
+        prices:Object.fromEntries(CATS.map(c=>[c.id,adjForPlan[c.id]!==undefined?adjForPlan[c.id]:base.prices[c.id]||0])),
+        costosCerrados:{...base.costosCerrados},
+        costosAbiertos:{...base.costosAbiertos},
+      };
+      const bd=calcGroupBD(empList,map,adjPlanData);
+      const mapping=map.planCol?externalPlans.filter(p=>planMapping[p]===planId||p===planId).map(p=>({from:p,to:planId})):[];
+      return{planId,empList,bd,mapping,adjPlanData,basePrices:base.prices};
+    });
+  }
+
+  const results=sub===3?buildResults():[];
+  const grandTotalFac=results.reduce((a,r)=>a+r.bd.totalFac,0);
+  const grandTotalCosto=results.reduce((a,r)=>a+r.bd.totalCosto,0);
+  const grandCF=grandTotalFac>0?grandTotalCosto/grandTotalFac*100:0;
 
   function handleFile(e){
     const f=e.target.files[0];if(!f)return;
@@ -275,47 +324,52 @@ function Cotizador({vigentePrices,costosCerrados,costosAbiertos,onSaveQuote,know
   }
 
   async function sendChat(){
-    if(!chatIn.trim()||chatLoading||!bd)return;
+    if(!chatIn.trim()||chatLoading||results.length===0)return;
     if(!apiKey){alert("Configurá tu API key de OpenRouter en Configuración.");return;}
     const m=chatIn.trim();setChatIn("");
     const hist=[...chat,{role:"user",content:m}];setChat(hist);setCL(true);
-    const sys=`Sos el asistente comercial de Omint. La métrica clave es C/F (Costo/Facturación). Menor es mejor.
-PRECIOS ACTUALES: ${CATS.map(c=>`${c.label}: $${fmt(effP[c.id]||0)}`).join(" | ")}
-COSTOS: ${CATS.map(c=>`${c.label}: $${fmt((cc[c.id]||0)+(ca[c.id]||0))}`).join(" | ")}
-EMPRESA "${empresa||"empresa"}": facturación=$${fmt(bd.totalFac)}, costo=$${fmt(bd.totalCosto)}, C/F=${bd.cfTotal.toFixed(1)}%
+    const resumen=results.map(r=>`${r.planId}: ${r.bd.totalSocios} socios, fac=$${fmt(r.bd.totalFac)}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join(" | ");
+    const sys=`Sos el asistente comercial de Omint. Métrica clave: C/F (Costo/Facturación), menor es mejor.
+PLANES Y RESULTADOS: ${resumen}
+TOTAL: fac=$${fmt(grandTotalFac)}, C/F=${grandCF.toFixed(1)}%
 Referencia: C/F ≤70% excelente, 70-82% aceptable, >82% alto.
-Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
+Al ajustar precios de UN plan respondé con el planId y el JSON de precios:
+PLAN: 4500_PYME
 \`\`\`json
 {"s0_25":0,"s26_34":0,"s35_54":0,"s55_59":0,"s60plus":0,"h1":0,"h2plus":0}
 \`\`\``;
     try{
       const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},
-        body:JSON.stringify({
-          model:"meta-llama/llama-3.3-70b-instruct:free",
-          max_tokens:700,
-          messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]
-        })
+        method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},
+        body:JSON.stringify({model:"mistralai/mistral-7b-instruct:free",max_tokens:700,messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]})
       });
       const data=await res.json();
       const full=data.choices?.[0]?.message?.content||data.error?.message||"Error.";
-      const json=exJSON(full);const expl=stripJ(full)||full;
-      if(json){const u={};CATS.forEach(c=>{u[c.id]=json[c.id]!==undefined?parseFloat(json[c.id])||0:effP[c.id];});setAdjPrices(u);}
-      setChat([...hist,{role:"assistant",content:expl,upd:!!json}]);
+      // detect plan
+      const planMatch=full.match(/PLAN:\s*(\S+)/);
+      const json=exJSON(full);const expl=stripJ(full.replace(/PLAN:\s*\S+/,""))||full;
+      if(json&&planMatch){
+        const pid=planMatch[1].trim();
+        if(PLAN_IDS.includes(pid)){
+          const u={};CATS.forEach(c=>{u[c.id]=json[c.id]!==undefined?parseFloat(json[c.id])||0:(planes[pid]?.prices[c.id]||0);});
+          setAdjPrices(prev=>({...prev,[pid]:u}));
+        }
+      }
+      setChat([...hist,{role:"assistant",content:expl,upd:!!(json&&planMatch)}]);
     }catch(e){setChat([...hist,{role:"assistant",content:"Error: "+e.message}]);}
     setCL(false);
   }
 
   async function guardar(status){
-    if(!bd)return;
-    onSaveQuote({id:Date.now().toString(),empresa:empresa.trim()||"Sin nombre",status,fecha:new Date().toISOString(),total:bd.totalFac,totalFac:bd.totalFac,totalCosto:bd.totalCosto,cfTotal:bd.cfTotal,socios:emps.length});
+    if(results.length===0)return;
+    onSaveQuote({id:Date.now().toString(),empresa:empresa.trim()||"Sin nombre",status,fecha:new Date().toISOString(),total:grandTotalFac,totalFac:grandTotalFac,totalCosto:grandTotalCosto,cfTotal:grandCF,socios:emps.length});
     setSaveMsg(status==="cerrado"?"✓ Guardado como cerrado":"✓ Guardado como abierto");
     setTimeout(()=>setSaveMsg(""),2500);
   }
 
-  const stepN=sub==="manual"?2:sub;
-  const sDef=[{n:1,l:"Nómina"},{n:2,l:"Precios"},{n:3,l:"Cotización"}];
+  const stepN=sub==="mapeo"?2:sub;
+  const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo de planes"},{n:3,l:"Cotización"}];
+  const needsMapeo=externalPlans.some(p=>!isOmintPlan(p));
 
   return(
     <div>
@@ -331,10 +385,11 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
         ))}
       </div>
 
+      {/* STEP 1: NÓMINA */}
       {sub===1&&(
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem"}}>
-            <div><h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Cargar nómina</h3><p style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>Subí el Excel con el grupo familiar de cada empleado.</p></div>
+            <div><h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Cargar nómina</h3><p style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>El template incluye la columna PLAN_ACTUAL para mapear planes competidores.</p></div>
             <button onClick={downloadTemplate} style={{...btnS,fontSize:12}}>↓ Template nómina</button>
           </div>
           {!emps?(
@@ -347,90 +402,98 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
             <div>
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#D1FAE5",borderRadius:8,marginBottom:"1.25rem",border:"1px solid #A7F3D0"}}>
                 <span>✅</span><span style={{fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{emps.length} empleados cargados</span>
-                <button onClick={()=>{setEmps(null);setCols([]);setMap({titAge:"",spAge:"",ku:"",k25:"",name:""});}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",fontFamily:FONT}}>Cambiar</button>
+                <button onClick={()=>{setEmps(null);setCols([]);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:""});setPlanMapping({});}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",fontFamily:FONT}}>Cambiar</button>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:"1.25rem"}}>
-                {[{k:"name",l:"Nombre",req:false},{k:"titAge",l:"Edad titular *",req:true},{k:"spAge",l:"Edad cónyuge",req:false},{k:"ku",l:"N° hijos menores de 25 *",req:true},{k:"k25",l:"N° hijos mayores de 25",req:false}].map(({k,l,req})=>(
+                {[{k:"name",l:"Nombre",req:false},{k:"titAge",l:"Edad titular *",req:true},{k:"spAge",l:"Edad cónyuge",req:false},{k:"ku",l:"N° hijos <25 *",req:true},{k:"k25",l:"N° hijos ≥25",req:false},{k:"planCol",l:"Columna de plan",req:false}].map(({k,l,req})=>(
                   <div key={k}>
                     <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>{l}</label>
-                    <select value={map[k]} onChange={e=>setMap(p=>({...p,[k]:e.target.value}))} style={{...inp,background:"#fff"}}><option value="">{req?"Seleccionar columna…":"No aplica"}</option>{cols.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                    <select value={map[k]} onChange={e=>setMap(p=>({...p,[k]:e.target.value}))} style={{...inp,background:"#fff"}}><option value="">{req?"Seleccionar…":"No aplica"}</option>{cols.map(c=><option key={c} value={c}>{c}</option>)}</select>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          {emps&&map.titAge&&map.ku&&<button onClick={()=>setSub(2)} style={{...btnP,marginTop:"1.5rem"}}>Continuar →</button>}
+          {emps&&map.titAge&&map.ku&&(
+            <button onClick={()=>needsMapeo?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>
+              {needsMapeo?"Continuar: mapear planes →":"Ver cotización →"}
+            </button>
+          )}
         </div>
       )}
 
-      {sub===2&&(
+      {/* STEP 2: MAPEO DE PLANES */}
+      {sub==="mapeo"&&(
         <div>
-          <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>¿Qué precios usamos?</h3>
-          <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.75rem",fontFamily:FONT}}>Los costos se toman automáticamente de las tablas vigentes.</p>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:620,marginBottom:"1.5rem"}}>
-            <div style={{...card(),opacity:vigentePrices?1:0.55,borderColor:vigentePrices?BLUE:BORDER,borderWidth:vigentePrices?2:1}}>
-              <p style={{fontSize:14,fontWeight:700,color:BLUE,marginBottom:8,fontFamily:FONT}}>Usar precios vigentes</p>
-              {vigentePrices?(
-                <>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,marginBottom:"1rem"}}><tbody>{CATS.map(c=><tr key={c.id}><td style={{padding:"3px 0",fontSize:11,color:"#6B7280",fontFamily:FONT}}>{c.label}</td><td style={{padding:"3px 0",textAlign:"right",fontWeight:700,color:BLUE,fontFamily:FONT}}>${fmt(vigentePrices[c.id]||0)}</td></tr>)}</tbody></table>
-                  <button onClick={()=>{setPrices({...vigentePrices});setAdjPrices({});setSub(3);}} style={btnP}>Usar estos precios →</button>
-                </>
-              ):<p style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>No hay precios vigentes guardados.</p>}
-            </div>
-            <div style={card()}>
-              <p style={{fontSize:14,fontWeight:700,color:"#374151",marginBottom:8,fontFamily:FONT}}>Ingresar manualmente</p>
-              <p style={{fontSize:12,color:"#6B7280",marginBottom:"1rem",fontFamily:FONT}}>Completá los precios para esta cotización.</p>
-              <button onClick={()=>{setPrices({...EMPTY_P});setAdjPrices({});setSub("manual");}} style={btnS}>Ingresar precios</button>
-            </div>
-          </div>
-          <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
-        </div>
-      )}
-
-      {sub==="manual"&&(
-        <div>
-          <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:"1.25rem",fontFamily:FONT}}>Precios para esta cotización</h3>
+          <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Mapeo de planes</h3>
+          <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Asigná cada plan actual de la nómina al plan Omint equivalente.</p>
           <div style={card()}>
-            <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",maxWidth:480}}>
-              <thead><tr><th style={TH({textAlign:"left"})}>Categoría</th><th style={TH()}>Precio ($)</th></tr></thead>
-              <tbody>{CATS.map(c=>(<tr key={c.id}><td style={TD({fontWeight:500})}>{c.label}</td><td style={TD({textAlign:"right"})}><input type="number" min={0} value={prices[c.id]||0} onChange={e=>setPrices(p=>({...p,[c.id]:parseFloat(e.target.value)||0}))} style={{...inp,width:160,textAlign:"right"}}/></td></tr>))}</tbody>
+            <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",maxWidth:600}}>
+              <thead><tr>
+                <th style={TH({textAlign:"left"})}>Plan en la nómina</th>
+                <th style={TH({textAlign:"left"})}>Empleados</th>
+                <th style={TH({textAlign:"left"})}>Mapear a plan Omint</th>
+              </tr></thead>
+              <tbody>{externalPlans.map(ext=>{
+                const count=emps.filter(e=>e[map.planCol]===ext).length;
+                const alreadyOmint=isOmintPlan(ext);
+                return(
+                  <tr key={ext}>
+                    <td style={TD({fontWeight:500})}>
+                      {ext}
+                      {alreadyOmint&&<span style={{...badge(BLUE,BLUE_LT),marginLeft:8,fontSize:10}}>Omint</span>}
+                    </td>
+                    <td style={TD({color:"#6B7280"})}>{count}</td>
+                    <td style={TD()}>
+                      {alreadyOmint?(
+                        <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>→ {ext}</span>
+                      ):(
+                        <select value={planMapping[ext]||""} onChange={e=>setPlanMapping(p=>({...p,[ext]:e.target.value}))} style={{...inp,width:180}}>
+                          <option value="">No cotizar</option>
+                          {PLAN_IDS.map(id=><option key={id} value={id}>{id}</option>)}
+                        </select>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}</tbody>
             </table>
           </div>
-          <div style={{display:"flex",gap:10,marginTop:"1.25rem"}}>
-            <button onClick={()=>setSub(2)} style={btnS}>← Volver</button>
+          <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
+            <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
             <button onClick={()=>setSub(3)} style={btnP}>Ver cotización →</button>
           </div>
         </div>
       )}
 
-      {sub===3&&bd&&(
+      {/* STEP 3: COTIZACIÓN */}
+      {sub===3&&(
         <div>
           <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:"1.25rem",flexWrap:"wrap"}}>
             <div style={{flex:"1 1 200px",minWidth:160,position:"relative"}}>
               <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Empresa</label>
               <input value={empresa} onChange={e=>{setEmpresa(e.target.value);setShowSug(true);}} onBlur={()=>setTimeout(()=>setShowSug(false),150)} onFocus={()=>setShowSug(true)} placeholder="Nombre de la empresa" style={inp}/>
-              {showSug&&suggestions.length>0&&(
+              {showSug&&knownEmpresas.filter(e=>e.toLowerCase().includes(empresa.toLowerCase())&&e.toLowerCase()!==empresa.toLowerCase()).length>0&&(
                 <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:10,background:"#fff",border:`1px solid ${BORDER}`,borderRadius:"0 0 8px 8px",boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
-                  {suggestions.map(s=><button key={s} onClick={()=>{setEmpresa(s);setShowSug(false);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:"#fff",cursor:"pointer",fontSize:13,fontFamily:FONT}}>📁 {s}</button>)}
+                  {knownEmpresas.filter(e=>e.toLowerCase().includes(empresa.toLowerCase())&&e.toLowerCase()!==empresa.toLowerCase()).map(s=><button key={s} onClick={()=>{setEmpresa(s);setShowSug(false);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:"#fff",cursor:"pointer",fontSize:13,fontFamily:FONT}}>📁 {s}</button>)}
                 </div>
               )}
-              {empresa&&isKnown&&<p style={{fontSize:11,color:BLUE,marginTop:4,fontFamily:FONT}}>📁 Carpeta existente: {empresa.trim()}</p>}
-              {empresa&&!isKnown&&empresa.trim().length>0&&<p style={{fontSize:11,color:"#9CA3AF",marginTop:4,fontFamily:FONT}}>📂 Nueva carpeta</p>}
             </div>
             <div style={{display:"flex",gap:8,paddingTop:26,flexWrap:"wrap"}}>
               {Object.keys(adjPrices).length>0&&<button onClick={()=>{setAdjPrices({});setChat([]);}} style={{...btnS,fontSize:12}}>↺ Resetear</button>}
-              <button onClick={()=>exportXLS(bd,empresa,emps,vigentePrices,costosCerrados,costosAbiertos)} style={btnP}>↓ Exportar cotización</button>
+              <button onClick={()=>exportXLS(results,empresa,emps,planes)} style={btnP}>↓ Exportar cotización</button>
               <button onClick={()=>guardar("abierto")} style={btnS}>Guardar abierto</button>
               <button onClick={()=>guardar("cerrado")} style={btnP}>Guardar cerrado</button>
             </div>
           </div>
           {saveMsg&&<div style={{padding:"10px 16px",background:"#D1FAE5",borderRadius:8,fontSize:13,color:"#065F46",fontWeight:600,marginBottom:"1rem",fontFamily:FONT}}>{saveMsg}</div>}
 
+          {/* IA */}
           <div style={{background:BLUE,borderRadius:12,padding:"16px 20px",marginBottom:"1.5rem"}}>
             <p style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.6)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Ajuste de precios con IA</p>
             <div style={{display:"flex",gap:8}}>
               <input value={chatIn} onChange={e=>setChatIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendChat()}
-                placeholder='Ej: "Necesito un C/F menor al 78%" · "¿Qué categoría tiene el C/F más alto?"'
+                placeholder='Ej: "Bajá el C/F del 6500_PYME al 75%" · "¿Qué plan tiene el C/F más alto?"'
                 disabled={chatLoading}
                 style={{...inp,flex:1,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff"}}/>
               <button onClick={sendChat} disabled={!chatIn.trim()||chatLoading}
@@ -438,36 +501,21 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
                 {chatLoading?"...":"Enviar →"}
               </button>
             </div>
-            {chat.length>0&&(()=>{
-              const last=chat[chat.length-1];
-              if(last.role!=="assistant")return null;
-              return(
-                <div style={{marginTop:12,padding:"10px 14px",background:"rgba(255,255,255,0.1)",borderRadius:8,fontSize:13,color:"rgba(255,255,255,0.9)",lineHeight:1.55,fontFamily:FONT}}>
-                  {last.upd&&<span style={{fontSize:11,color:"#34D399",display:"block",marginBottom:4,fontWeight:600}}>✓ Precios actualizados</span>}
-                  {last.content}
-                </div>
-              );
-            })()}
-            {chat.length>1&&(
-              <details style={{marginTop:8}}>
-                <summary style={{fontSize:11,color:"rgba(255,255,255,0.5)",cursor:"pointer",fontFamily:FONT}}>Ver historial ({Math.floor(chat.length/2)} intercambio{chat.length>2?"s":""})</summary>
-                <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,maxHeight:200,overflowY:"auto"}}>
-                  {chat.slice(0,-1).map((m,i)=>(
-                    <div key={i} style={{padding:"6px 10px",borderRadius:6,background:m.role==="user"?"rgba(255,255,255,0.08)":"rgba(255,255,255,0.05)",fontSize:12,color:"rgba(255,255,255,0.75)",fontFamily:FONT}}>
-                      <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginRight:6}}>{m.role==="user"?"Vos:":"IA:"}</span>{m.content}
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
+            {chat.length>0&&(()=>{const last=chat[chat.length-1];if(last.role!=="assistant")return null;return(
+              <div style={{marginTop:12,padding:"10px 14px",background:"rgba(255,255,255,0.1)",borderRadius:8,fontSize:13,color:"rgba(255,255,255,0.9)",lineHeight:1.55,fontFamily:FONT}}>
+                {last.upd&&<span style={{fontSize:11,color:"#34D399",display:"block",marginBottom:4,fontWeight:600}}>✓ Precios actualizados</span>}
+                {last.content}
+              </div>
+            );})()}
           </div>
 
+          {/* KPIs globales */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:"1.5rem"}}>
             {[
-              {l:"Socios",v:emps.length,bg:"#fff"},
-              {l:"Facturación mensual",v:`$${fmt(bd.totalFac)}`,bg:BLUE,white:true},
-              {l:"Costo mensual",v:`$${fmt(bd.totalCosto)}`,c:"#DC2626",bg:"#FEF2F2"},
-              {l:"C / F",v:`${bd.cfTotal.toFixed(1)}%`,sub:cfLabel(bd.cfTotal),c:cfColor(bd.cfTotal),bg:cfBg(bd.cfTotal)},
+              {l:"Socios totales",v:emps?emps.length:0,bg:"#fff"},
+              {l:"Facturación total",v:`$${fmt(grandTotalFac)}`,bg:BLUE,white:true},
+              {l:"Costo total",v:`$${fmt(grandTotalCosto)}`,c:"#DC2626",bg:"#FEF2F2"},
+              {l:"C/F global",v:`${grandCF.toFixed(1)}%`,sub:cfLabel(grandCF),c:cfColor(grandCF),bg:cfBg(grandCF)},
             ].map(c=>(
               <div key={c.l} style={{background:c.bg,border:`1px solid ${c.bg==="#fff"?BORDER:"transparent"}`,borderRadius:12,padding:"1rem 1.25rem"}}>
                 <p style={{fontSize:11,fontWeight:600,color:c.white?"rgba(255,255,255,0.7)":"#6B7280",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>{c.l}</p>
@@ -477,67 +525,109 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
             ))}
           </div>
 
-          <div style={card()}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr>{["Categoría","N°","Precio","C.Cerrado","C.Abierto","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
-              <tbody>
-                {bd.rows.map(r=>{
-                  const hasAdj=adjPrices[r.id]!==undefined;
-                  return(
-                    <tr key={r.id} style={{opacity:r.count===0?0.3:1}}>
-                      <td style={TD({fontWeight:500})}>{r.label}</td>
-                      <td style={TD({textAlign:"right",color:"#6B7280"})}>{r.count}</td>
-                      <td style={TD({textAlign:"right"})}>
-                        <input type="number" min={0} value={r.precio} onChange={e=>setAdjPrices(p=>({...p,[r.id]:parseFloat(e.target.value)||0}))}
-                          style={{width:90,textAlign:"right",fontSize:13,padding:"4px 8px",border:`1px solid ${hasAdj?BLUE:BORDER}`,borderRadius:6,color:hasAdj?BLUE:"#111827",fontFamily:FONT}}/>
-                      </td>
-                      <td style={TD({textAlign:"right",color:"#6B7280"})}>${fmt(r.cCerrado)}</td>
-                      <td style={TD({textAlign:"right",color:"#6B7280"})}>${fmt(r.cAbierto)}</td>
-                      <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(r.facturacion)}</td>
-                      <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(r.costo)}</td>
-                      <td style={TD({textAlign:"right"})}>
-                        {r.facturacion>0&&<span style={{...badge(cfColor(r.cf),cfBg(r.cf)),minWidth:52,display:"inline-block",textAlign:"center"}}>{r.cf.toFixed(0)}%</span>}
-                      </td>
+          {/* Resumen por plan */}
+          {results.length>1&&(
+            <div style={{...card(),marginBottom:"1.5rem"}}>
+              <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:"1rem",fontFamily:FONT}}>Resumen por plan</p>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:500}}>
+                  <thead><tr>{["Plan","Socios","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
+                  <tbody>{results.map(r=>(
+                    <tr key={r.planId}>
+                      <td style={TD({fontWeight:600,color:BLUE})}>{r.planId}</td>
+                      <td style={TD({textAlign:"right",color:"#6B7280"})}>{r.bd.totalSocios}</td>
+                      <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(r.bd.totalFac)}</td>
+                      <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(r.bd.totalCosto)}</td>
+                      <td style={TD({textAlign:"right"})}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),minWidth:52,display:"inline-block",textAlign:"center"}}>{r.bd.cfTotal.toFixed(1)}%</span></td>
                     </tr>
-                  );
-                })}
-                <tr style={{background:BLUE_LT}}>
-                  <td style={{padding:"12px 14px",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>Total</td>
-                  <td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/>
-                  <td style={{padding:"12px 14px",textAlign:"right",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(bd.totalFac)}</td>
-                  <td style={{padding:"12px 14px",textAlign:"right",fontWeight:700,color:"#DC2626",borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(bd.totalCosto)}</td>
-                  <td style={{padding:"12px 14px",textAlign:"right",borderTop:`2px solid ${BLUE}`}}>
-                    <span style={{...badge(cfColor(bd.cfTotal),cfBg(bd.cfTotal)),fontWeight:700,fontSize:13}}>{bd.cfTotal.toFixed(1)}%</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <button onClick={()=>setSub(2)} style={{...btnS,marginTop:"1.5rem"}}>← Volver</button>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Desglose por plan */}
+          {results.map(r=>(
+            <div key={r.planId} style={{...card(),marginBottom:"1.5rem"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1rem"}}>
+                <span style={{...badge("#fff",BLUE),fontSize:13,padding:"4px 14px"}}>{r.planId}</span>
+                <span style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios</span>
+                {r.mapping.length>0&&(
+                  <span style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>
+                    ← {r.mapping.map(m=>m.from).join(", ")}
+                  </span>
+                )}
+                <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+                  <span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:12}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
+                </div>
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:680}}>
+                  <thead><tr>{["Categoría","N°","Precio","C.Cerrado","C.Abierto","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {r.bd.rows.map(row=>{
+                      const hasAdj=adjPrices[r.planId]?.[row.id]!==undefined;
+                      return(
+                        <tr key={row.id} style={{opacity:row.count===0?0.3:1}}>
+                          <td style={TD({fontWeight:500})}>{row.label}</td>
+                          <td style={TD({textAlign:"right",color:"#6B7280"})}>{row.count}</td>
+                          <td style={TD({textAlign:"right"})}>
+                            <input type="number" min={0} value={row.precio}
+                              onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjPrices(prev=>({...prev,[r.planId]:{...(prev[r.planId]||{}),[ row.id]:v}}));}}
+                              style={{width:88,textAlign:"right",fontSize:12,padding:"3px 6px",border:`1px solid ${hasAdj?BLUE:BORDER}`,borderRadius:6,color:hasAdj?BLUE:"#111827",fontFamily:FONT}}/>
+                          </td>
+                          <td style={TD({textAlign:"right",color:"#6B7280"})}>${fmt(row.cC)}</td>
+                          <td style={TD({textAlign:"right",color:"#6B7280"})}>${fmt(row.cA)}</td>
+                          <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(row.fac)}</td>
+                          <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(row.cos)}</td>
+                          <td style={TD({textAlign:"right"})}>
+                            {row.fac>0&&<span style={{...badge(cfColor(row.cf),cfBg(row.cf)),minWidth:44,display:"inline-block",textAlign:"center",fontSize:11}}>{row.cf.toFixed(0)}%</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr style={{background:BLUE_LT}}>
+                      <td style={{padding:"10px 12px",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>Total</td>
+                      <td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/>
+                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(r.bd.totalFac)}</td>
+                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"#DC2626",borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(r.bd.totalCosto)}</td>
+                      <td style={{padding:"10px 12px",textAlign:"right",borderTop:`2px solid ${BLUE}`}}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontWeight:700,fontSize:12}}>{r.bd.cfTotal.toFixed(1)}%</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+
+          {results.length===0&&(
+            <div style={{...card(),textAlign:"center",padding:"3rem",color:"#9CA3AF"}}>
+              <p style={{fontFamily:FONT}}>No hay empleados mapeados a ningún plan Omint. Volvé al paso de mapeo.</p>
+            </div>
+          )}
+          <button onClick={()=>setSub(needsMapeo?"mapeo":1)} style={{...btnS,marginTop:"0.5rem"}}>← Volver</button>
         </div>
       )}
     </div>
   );
 }
 
+/* ══ APP SHELL ══ */
 export default function App(){
   const [sec,setSec]=useState("cotizador");
-  const [vp,setVp]=useState(null);
-  const [cc,setCc]=useState(null);
-  const [ca,setCa]=useState(null);
+  const [planes,setPlanes]=useState(null);
   const [quotes,setQuotes]=useState([]);
   const [apiKey,setApiKey]=useState("");
   const [loaded,setLoaded]=useState(false);
 
   useEffect(()=>{
-    setVp(lsGet("omint-vp"));setCc(lsGet("omint-cc"));setCa(lsGet("omint-ca"));
-    setQuotes(lsGet("omint-quotes")||[]);setApiKey(lsGet("omint-apikey")||"");
+    const p=lsGet("omint-planes");
+    setPlanes(p||JSON.parse(JSON.stringify(DEFAULT_PLANES)));
+    setQuotes(lsGet("omint-quotes")||[]);
+    setApiKey(lsGet("omint-apikey")||"");
     setLoaded(true);
   },[]);
 
-  function saveVp(p){setVp(p);lsSet("omint-vp",p);}
-  function saveCc(p){setCc(p);lsSet("omint-cc",p);}
-  function saveCa(p){setCa(p);lsSet("omint-ca",p);}
+  function savePlanes(p){setPlanes(p);lsSet("omint-planes",p);}
   function saveQuote(q){const nq=[q,...quotes];setQuotes(nq);lsSet("omint-quotes",nq);}
   function updQuote(id,upd){const nq=quotes.map(q=>q.id===id?{...q,...upd}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
   function saveApiKey(k){setApiKey(k);lsSet("omint-apikey",k);}
@@ -545,16 +635,14 @@ export default function App(){
   const knownEmpresas=[...new Set(quotes.map(q=>q.empresa).filter(Boolean))];
   const nav=[
     {id:"cotizador",label:"Cotizador",strong:true},
-    {id:"vigente",label:"Precios Vigentes",strong:false},
-    {id:"costos-cerrados",label:"Costos Cerrados Vigentes",strong:false},
-    {id:"costos-abiertos",label:"Costos Abiertos Vigentes",strong:false},
+    {id:"planes",label:"Planes Vigentes",strong:false},
     {id:"historial",label:"Historial",strong:false},
     {id:"config",label:"Configuración",strong:false},
   ];
 
   return(
     <div style={{display:"flex",fontFamily:FONT,minHeight:"100vh",background:GRAY}}>
-      <div style={{width:226,background:"#fff",borderRight:`1px solid ${BORDER}`,flexShrink:0,display:"flex",flexDirection:"column"}}>
+      <div style={{width:220,background:"#fff",borderRight:`1px solid ${BORDER}`,flexShrink:0,display:"flex",flexDirection:"column"}}>
         <div style={{padding:"1.25rem",borderBottom:`1px solid ${BORDER}`}}>
           <img src={OMINT_LOGO} alt="Grupo Omint" style={{width:"100%",maxWidth:150,height:"auto"}}/>
         </div>
@@ -586,10 +674,8 @@ export default function App(){
       </div>
       <div style={{flex:1,padding:"2rem 2.5rem",overflowY:"auto",minWidth:0}}>
         {!loaded&&<p style={{fontSize:13,color:"#9CA3AF",fontFamily:FONT}}>Cargando…</p>}
-        {loaded&&sec==="cotizador"&&<Cotizador vigentePrices={vp} costosCerrados={cc} costosAbiertos={ca} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
-        {loaded&&sec==="vigente"&&<TablaEditable title="Precios Vigentes" subtitle="Lo que Omint le cobra a cada empresa por socio por mes." values={vp} onSave={saveVp} colorAccent={BLUE}/>}
-        {loaded&&sec==="costos-cerrados"&&<TablaEditable title="Costos Cerrados Vigentes" subtitle="Lo que Omint paga directo al prestador de la cartilla por socio por mes." values={cc} onSave={saveCc} colorAccent="#7C3AED"/>}
-        {loaded&&sec==="costos-abiertos"&&<TablaEditable title="Costos Abiertos Vigentes" subtitle="Lo que Omint reintegra al socio cuando atiende fuera de la cartilla, por mes." values={ca} onSave={saveCa} colorAccent="#B45309"/>}
+        {loaded&&sec==="cotizador"&&<Cotizador planes={planes||DEFAULT_PLANES} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
+        {loaded&&sec==="planes"&&<PlanesVigentes planes={planes} onSave={savePlanes}/>}
         {loaded&&sec==="historial"&&<Historial quotes={quotes} onUpdate={updQuote}/>}
         {loaded&&sec==="config"&&<Configuracion apiKey={apiKey} onSave={saveApiKey}/>}
       </div>
