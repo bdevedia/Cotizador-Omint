@@ -238,9 +238,11 @@ function Configuracion({apiKey,onSave}){
       <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:6,fontFamily:FONT}}>Configuración</h2>
       <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>La API key se guarda localmente y se usa solo para el chat de negociación de precios.</p>
       <div style={card()}>
-        <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>API Key de Anthropic</label>
-        <input type="password" value={k} onChange={e=>setK(e.target.value)} placeholder="sk-ant-..." style={{...inp,maxWidth:480,marginBottom:12}}/>
-        <p style={{fontSize:11,color:"#9CA3AF",marginBottom:16,fontFamily:FONT}}>Conseguila en <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{color:BLUE}}>console.anthropic.com</a> → API Keys</p>
+        <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>API Key de Google AI Studio</label>
+        <input type="password" value={k} onChange={e=>setK(e.target.value)} placeholder="AIza..." style={{...inp,maxWidth:480,marginBottom:12}}/>
+        <p style={{fontSize:11,color:"#9CA3AF",marginBottom:16,fontFamily:FONT}}>
+          Conseguila gratis en <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" style={{color:BLUE}}>aistudio.google.com</a> → Get API key
+        </p>
         <button onClick={()=>{onSave(k);setOk(true);setTimeout(()=>setOk(false),2500);}} style={btnP}>{ok?"✓ Guardado":"Guardar API key"}</button>
       </div>
     </div>
@@ -279,7 +281,7 @@ function Cotizador({vigentePrices,costosCerrados,costosAbiertos,onSaveQuote,know
 
   async function sendChat(){
     if(!chatIn.trim()||chatLoading||!bd)return;
-    if(!apiKey){alert("Configurá tu API key en Configuración.");return;}
+    if(!apiKey){alert("Configurá tu API key de Google AI Studio en Configuración.");return;}
     const m=chatIn.trim();setChatIn("");
     const hist=[...chat,{role:"user",content:m}];setChat(hist);setCL(true);
     const sys=`Sos el asistente comercial de Omint. La métrica clave es C/F (Costo/Facturación). Menor es mejor.
@@ -287,18 +289,23 @@ PRECIOS ACTUALES: ${CATS.map(c=>`${c.label}: $${fmt(effP[c.id]||0)}`).join(" | "
 COSTOS: ${CATS.map(c=>`${c.label}: $${fmt((cc[c.id]||0)+(ca[c.id]||0))}`).join(" | ")}
 EMPRESA "${empresa||"empresa"}": facturación=$${fmt(bd.totalFac)}, costo=$${fmt(bd.totalCosto)}, C/F=${bd.cfTotal.toFixed(1)}%
 Referencia: C/F ≤70% excelente, 70-82% aceptable, >82% alto.
-Al ajustar respondé con explicación corta + JSON:
+Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
 \`\`\`json
 {"s0_25":0,"s26_34":0,"s35_54":0,"s55_59":0,"s60plus":0,"h1":0,"h2plus":0}
 \`\`\``;
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:700,system:sys,messages:hist.map(x=>({role:x.role,content:x.content}))})});
+      const prompt=sys+"\n\n"+hist.map(x=>(x.role==="user"?"Vos: ":"IA: ")+x.content).join("\n");
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}]})
+      });
       const data=await res.json();
-      const full=data.content?.map(b=>b.text||"").join("")||"Error.";
+      const full=data.candidates?.[0]?.content?.parts?.[0]?.text||data.error?.message||"Error.";
       const json=exJSON(full);const expl=stripJ(full)||full;
       if(json){const u={};CATS.forEach(c=>{u[c.id]=json[c.id]!==undefined?parseFloat(json[c.id])||0:effP[c.id];});setAdjPrices(u);}
       setChat([...hist,{role:"assistant",content:expl,upd:!!json}]);
-    }catch{setChat([...hist,{role:"assistant",content:"Error de conexión."}]);}
+    }catch(e){setChat([...hist,{role:"assistant",content:"Error de conexión: "+e.message}]);}
     setCL(false);
   }
 
@@ -326,7 +333,6 @@ Al ajustar respondé con explicación corta + JSON:
         ))}
       </div>
 
-      {/* STEP 1: NÓMINA */}
       {sub===1&&(
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem"}}>
@@ -359,7 +365,6 @@ Al ajustar respondé con explicación corta + JSON:
         </div>
       )}
 
-      {/* STEP 2: PRECIOS */}
       {sub===2&&(
         <div>
           <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>¿Qué precios usamos?</h3>
@@ -384,7 +389,6 @@ Al ajustar respondé con explicación corta + JSON:
         </div>
       )}
 
-      {/* STEP 2b: MANUAL */}
       {sub==="manual"&&(
         <div>
           <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:"1.25rem",fontFamily:FONT}}>Precios para esta cotización</h3>
@@ -401,10 +405,8 @@ Al ajustar respondé con explicación corta + JSON:
         </div>
       )}
 
-      {/* STEP 3: COTIZACIÓN */}
       {sub===3&&bd&&(
         <div>
-          {/* Empresa + botones */}
           <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:"1.25rem",flexWrap:"wrap"}}>
             <div style={{flex:"1 1 200px",minWidth:160,position:"relative"}}>
               <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Empresa</label>
@@ -426,7 +428,7 @@ Al ajustar respondé con explicación corta + JSON:
           </div>
           {saveMsg&&<div style={{padding:"10px 16px",background:"#D1FAE5",borderRadius:8,fontSize:13,color:"#065F46",fontWeight:600,marginBottom:"1rem",fontFamily:FONT}}>{saveMsg}</div>}
 
-          {/* IA — barra de búsqueda arriba */}
+          {/* IA — barra arriba */}
           <div style={{background:BLUE,borderRadius:12,padding:"16px 20px",marginBottom:"1.5rem"}}>
             <p style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.6)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Ajuste de precios con IA</p>
             <div style={{display:"flex",gap:8}}>
@@ -463,7 +465,7 @@ Al ajustar respondé con explicación corta + JSON:
             )}
           </div>
 
-          {/* KPI cards */}
+          {/* KPIs */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:"1.5rem"}}>
             {[
               {l:"Socios",v:emps.length,bg:"#fff"},
