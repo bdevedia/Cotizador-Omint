@@ -17,16 +17,26 @@ const CATS=[
 ];
 const EMPTY_P={s0_25:0,s26_34:0,s35_54:0,s55_59:0,s60plus:0,h1:0,h2plus:0};
 const PLAN_IDS=["4500_PYME","6500_PYME","8500_PYME"];
+const ZONA_IDS=["AMBA","Mendoza","Córdoba"];
 const EMPTY_PLAN={prices:{...EMPTY_P},costosCerrados:{...EMPTY_P},costosAbiertos:{...EMPTY_P}};
-const DEFAULT_PLANES=Object.fromEntries(PLAN_IDS.map(id=>[id,JSON.parse(JSON.stringify(EMPTY_PLAN))]));
+
+function buildDefaultPlanes(){
+  const d={};
+  ZONA_IDS.forEach(z=>{d[z]={};PLAN_IDS.forEach(p=>{d[z][p]=JSON.parse(JSON.stringify(EMPTY_PLAN));});});
+  return d;
+}
 
 function catAge(a){if(a<=25)return"s0_25";if(a<=34)return"s26_34";if(a<=54)return"s35_54";if(a<=59)return"s55_59";return"s60plus";}
 function cfColor(cf){return cf<=70?"#16A34A":cf<=82?"#CA8A04":"#DC2626";}
 function cfBg(cf){return cf<=70?"#D1FAE5":cf<=82?"#FEF3C7":"#FEF2F2";}
 function cfLabel(cf){return cf<=70?"Excelente":cf<=82?"Aceptable":"Alto";}
+const fmt=n=>(+n).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtD=d=>new Date(d).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"});
+function exJSON(t){const m=t.match(/```json\s*([\s\S]*?)```/);if(m){try{return JSON.parse(m[1]);}catch{}}const m2=t.match(/\{[\s\S]*?\}/);if(m2){try{return JSON.parse(m2[0]);}catch{}}return null;}
+function stripJ(t){return t.replace(/```json[\s\S]*?```/g,"").replace(/\{[^}]*\}/g,"").trim();}
 
 function calcGroupBD(emps,map,planData){
-  const {prices,costosCerrados,costosAbiertos}=planData;
+  const{prices,costosCerrados,costosAbiertos}=planData;
   const c={};CATS.forEach(x=>{c[x.id]=0;});
   emps.forEach(e=>{
     const ta=parseInt(e[map.titAge]);if(!isNaN(ta))c[catAge(ta)]++;
@@ -45,11 +55,6 @@ function calcGroupBD(emps,map,planData){
   return{rows,totalFac,totalCosto,cfTotal:totalFac>0?totalCosto/totalFac*100:0,totalSocios:emps.length};
 }
 
-const fmt=n=>(+n).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
-const fmtD=d=>new Date(d).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"});
-function exJSON(t){const m=t.match(/```json\s*([\s\S]*?)```/);if(m){try{return JSON.parse(m[1]);}catch{}}const m2=t.match(/\{[\s\S]*?\}/);if(m2){try{return JSON.parse(m2[0]);}catch{}}return null;}
-function stripJ(t){return t.replace(/```json[\s\S]*?```/g,"").replace(/\{[^}]*\}/g,"").trim();}
-
 const card=(x={})=>({background:"#fff",border:`1px solid ${BORDER}`,borderRadius:12,padding:"1.5rem",...x});
 const TH=(x={})=>({padding:"9px 12px",fontWeight:600,fontSize:11,color:"#6B7280",borderBottom:`1px solid ${BORDER}`,textAlign:"right",background:GRAY,letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:FONT,whiteSpace:"nowrap",...x});
 const TD=(x={})=>({padding:"9px 12px",borderBottom:`1px solid ${BORDER}`,fontSize:13,fontFamily:FONT,...x});
@@ -58,25 +63,31 @@ const btnP={background:BLUE,color:"#fff",border:"none",borderRadius:8,padding:"1
 const btnS={background:"#fff",color:BLUE,border:`1px solid ${BORDER}`,borderRadius:8,padding:"10px 20px",fontWeight:500,fontSize:13,cursor:"pointer",fontFamily:FONT};
 const inp={border:`1px solid ${BORDER}`,borderRadius:8,padding:"8px 12px",fontSize:13,width:"100%",outline:"none",fontFamily:FONT};
 
+const ZONA_COLORS={
+  "AMBA":  {c:"#1B2A7B",bg:"#EEF1FB"},
+  "Mendoza":{c:"#065F46",bg:"#D1FAE5"},
+  "Córdoba":{c:"#92400E",bg:"#FEF3C7"},
+};
+
 function downloadTemplate(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([
-    ["NOMBRE","EDAD_TITULAR","EDAD_CONYUGE","HIJOS_MENORES_25","HIJOS_MAYORES_25","PLAN_ACTUAL"],
-    ["Juan Pérez",35,33,2,0,"Osde 210"],
-    ["María García",28,0,0,0,"Osde 310"],
-    ["Carlos López",52,49,1,1,"Galeno ORO 210"],
-    ["Ana Martínez",61,58,0,2,"4500_PYME"],
+    ["NOMBRE","EDAD_TITULAR","EDAD_CONYUGE","HIJOS_MENORES_25","HIJOS_MAYORES_25","PLAN_ACTUAL","ZONA"],
+    ["Juan Pérez",35,33,2,0,"Osde 210","AMBA"],
+    ["María García",28,0,0,0,"Osde 310","AMBA"],
+    ["Carlos López",52,49,1,1,"Galeno ORO 210","Córdoba"],
+    ["Ana Martínez",61,58,0,2,"4500_PYME","Mendoza"],
   ]);
-  ws["!cols"]=[{wch:20},{wch:14},{wch:14},{wch:18},{wch:18},{wch:16}];
+  ws["!cols"]=[{wch:20},{wch:14},{wch:14},{wch:18},{wch:18},{wch:16},{wch:12}];
   XLSX.utils.book_append_sheet(wb,ws,"Nómina");
   XLSX.writeFile(wb,"template_nomina_omint.xlsx");
 }
 
-function exportXLS(planResults,empresa,emps,planes){
+function exportXLS(groups,empresa,emps){
   const wb=XLSX.utils.book_new();
   const today=new Date().toLocaleDateString("es-AR");
-  const totalFac=planResults.reduce((a,r)=>a+r.bd.totalFac,0);
-  const totalCosto=planResults.reduce((a,r)=>a+r.bd.totalCosto,0);
+  const totalFac=groups.reduce((a,g)=>a+g.bd.totalFac,0);
+  const totalCosto=groups.reduce((a,g)=>a+g.bd.totalCosto,0);
   const cfTotal=totalFac>0?totalCosto/totalFac*100:0;
   const ws1=XLSX.utils.aoa_to_sheet([
     ["GRUPO OMINT"],[""],["COTIZACIÓN CORPORATIVA"],[""],
@@ -89,14 +100,21 @@ function exportXLS(planResults,empresa,emps,planes){
   ]);
   ws1["!cols"]=[{wch:30},{wch:25}];
   XLSX.utils.book_append_sheet(wb,ws1,"Portada");
-  planResults.forEach(({planId,bd,mapping})=>{
-    const r=[["Plan Omint:",planId],["Socios:",bd.totalSocios],[""],
-      ["Categoría","N°","Precio","C.Cerrado","C.Abierto","Facturación","Costo","C/F","Calificación"]];
-    bd.rows.forEach(row=>{r.push([row.label,row.count,+row.precio.toFixed(2),+row.cC.toFixed(2),+row.cA.toFixed(2),+row.fac.toFixed(2),+row.cos.toFixed(2),row.fac>0?+(row.cf.toFixed(1)):"-",row.fac>0?cfLabel(row.cf):"-"]);});
-    r.push([],["TOTAL",bd.totalSocios,"","","",+bd.totalFac.toFixed(2),+bd.totalCosto.toFixed(2),+bd.cfTotal.toFixed(1)+"%",cfLabel(bd.cfTotal)]);
-    if(mapping&&mapping.length>0){r.push([],["Planes mapeados desde:"]);mapping.forEach(m=>r.push([`  ${m.from}`,"→",m.to]));}
-    const ws=XLSX.utils.aoa_to_sheet(r);ws["!cols"]=[{wch:18},{wch:8},{wch:12},{wch:14},{wch:14},{wch:14},{wch:12},{wch:8},{wch:12}];
-    XLSX.utils.book_append_sheet(wb,ws,planId.replace(/[^a-zA-Z0-9_]/g,"_"));
+  // Resumen
+  const rsum=[["Zona","Plan","Socios","Facturación ($)","Costo ($)","C/F (%)","Calificación"]];
+  groups.forEach(g=>{rsum.push([g.zona,g.planId,g.bd.totalSocios,+g.bd.totalFac.toFixed(2),+g.bd.totalCosto.toFixed(2),+g.bd.cfTotal.toFixed(1)+"%",cfLabel(g.bd.cfTotal)]);});
+  rsum.push([],[`TOTAL`,"",emps.length,+totalFac.toFixed(2),+totalCosto.toFixed(2),+cfTotal.toFixed(1)+"%",cfLabel(cfTotal)]);
+  const wsR=XLSX.utils.aoa_to_sheet(rsum);wsR["!cols"]=[{wch:12},{wch:12},{wch:8},{wch:16},{wch:14},{wch:8},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,wsR,"Resumen");
+  // Por zona+plan
+  groups.forEach(g=>{
+    const r=[["Zona:",g.zona],["Plan:",g.planId],["Socios:",g.bd.totalSocios],[""],
+      ["Categoría","N°","Precio","C.Cerrado","C.Abierto","Facturación","Costo","C/F"]];
+    g.bd.rows.forEach(row=>{r.push([row.label,row.count,+row.precio.toFixed(2),+row.cC.toFixed(2),+row.cA.toFixed(2),+row.fac.toFixed(2),+row.cos.toFixed(2),row.fac>0?+(row.cf.toFixed(1)):"-"]);});
+    r.push([],["TOTAL",g.bd.totalSocios,"","","",+g.bd.totalFac.toFixed(2),+g.bd.totalCosto.toFixed(2),+g.bd.cfTotal.toFixed(1)+"%"]);
+    const ws=XLSX.utils.aoa_to_sheet(r);ws["!cols"]=[{wch:16},{wch:8},{wch:12},{wch:14},{wch:14},{wch:14},{wch:12},{wch:8}];
+    const sheetName=`${g.zona}_${g.planId}`.replace(/[^a-zA-Z0-9_]/g,"_").substring(0,31);
+    XLSX.utils.book_append_sheet(wb,ws,sheetName);
   });
   if(emps&&emps.length>0)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(emps),"Nómina");
   XLSX.writeFile(wb,`Cotizacion_${empresa||"empresa"}_${today.replace(/\//g,"-")}.xlsx`);
@@ -104,17 +122,30 @@ function exportXLS(planResults,empresa,emps,planes){
 
 /* ══ PLANES VIGENTES ══ */
 function PlanesVigentes({planes,onSave}){
-  const [loc,setLoc]=useState(planes||JSON.parse(JSON.stringify(DEFAULT_PLANES)));
+  const def=buildDefaultPlanes();
+  const [loc,setLoc]=useState(()=>{
+    const base=JSON.parse(JSON.stringify(def));
+    if(planes){Object.keys(planes).forEach(z=>{if(base[z]&&planes[z])Object.keys(planes[z]).forEach(p=>{if(base[z][p])base[z][p]=JSON.parse(JSON.stringify(planes[z][p]));});});}
+    return base;
+  });
+  const [selZona,setSelZona]=useState(ZONA_IDS[0]);
   const [selPlan,setSelPlan]=useState(PLAN_IDS[0]);
   const [ok,setOk]=useState(false);
-  useEffect(()=>{setLoc(planes||JSON.parse(JSON.stringify(DEFAULT_PLANES)));},[planes]);
-  const p=loc[selPlan]||JSON.parse(JSON.stringify(EMPTY_PLAN));
+  useEffect(()=>{
+    const base=JSON.parse(JSON.stringify(def));
+    if(planes){Object.keys(planes).forEach(z=>{if(base[z]&&planes[z])Object.keys(planes[z]).forEach(p=>{if(base[z][p])base[z][p]=JSON.parse(JSON.stringify(planes[z][p]));});});}
+    setLoc(base);
+  },[planes]);
+
+  const zc=ZONA_COLORS[selZona]||{c:BLUE,bg:BLUE_LT};
+  const p=loc[selZona]?.[selPlan]||JSON.parse(JSON.stringify(EMPTY_PLAN));
 
   function upd(type,catId,val){
     setLoc(prev=>{
       const n=JSON.parse(JSON.stringify(prev));
-      if(!n[selPlan])n[selPlan]=JSON.parse(JSON.stringify(EMPTY_PLAN));
-      n[selPlan][type][catId]=parseFloat(val)||0;
+      if(!n[selZona])n[selZona]={};
+      if(!n[selZona][selPlan])n[selZona][selPlan]=JSON.parse(JSON.stringify(EMPTY_PLAN));
+      n[selZona][selPlan][type][catId]=parseFloat(val)||0;
       return n;
     });
   }
@@ -122,54 +153,67 @@ function PlanesVigentes({planes,onSave}){
   return(
     <div>
       <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Planes Vigentes</h2>
-      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Configurá precios y costos de cada plan. Estos datos se usan automáticamente en el cotizador.</p>
-      <div style={{display:"flex",gap:8,marginBottom:"1.5rem"}}>
-        {PLAN_IDS.map(id=>(
-          <button key={id} onClick={()=>setSelPlan(id)} style={{...( selPlan===id?btnP:btnS),padding:"8px 16px",fontSize:13}}>
-            {id}
-          </button>
-        ))}
+      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Configurá precios y costos por zona geográfica y plan.</p>
+
+      {/* Zona selector */}
+      <div style={{marginBottom:"1rem"}}>
+        <p style={{fontSize:11,fontWeight:600,color:"#374151",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Zona</p>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z]||{c:BLUE,bg:BLUE_LT};return(
+            <button key={z} onClick={()=>setSelZona(z)} style={{padding:"8px 18px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:selZona===z?700:400,
+              background:selZona===z?zc2.c:"#fff",color:selZona===z?"#fff":zc2.c,
+              border:`1.5px solid ${zc2.c}`}}>
+              {z}
+            </button>
+          );})}
+        </div>
       </div>
+
+      {/* Plan selector */}
+      <div style={{marginBottom:"1.5rem"}}>
+        <p style={{fontSize:11,fontWeight:600,color:"#374151",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Plan</p>
+        <div style={{display:"flex",gap:8}}>
+          {PLAN_IDS.map(id=>(
+            <button key={id} onClick={()=>setSelPlan(id)} style={{...( selPlan===id?{...btnP,background:zc.c}:btnS),padding:"8px 16px",fontSize:13}}>
+              {id}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div style={card()}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1rem"}}>
+          <span style={{...badge(zc.c,zc.bg),fontSize:12}}>{selZona}</span>
+          <span style={{...badge("#fff",BLUE),fontSize:12}}>{selPlan}</span>
+        </div>
         <div style={{overflowX:"auto"}}>
-          <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",minWidth:580}}>
+          <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",minWidth:560}}>
             <thead>
               <tr>
-                <th style={TH({textAlign:"left",fontSize:12})}>Categoría</th>
-                <th style={TH({fontSize:12})}>Precio ($)</th>
-                <th style={TH({fontSize:12,color:"#7C3AED"})}>Costo Cerrado ($)</th>
-                <th style={TH({fontSize:12,color:"#B45309"})}>Costo Abierto ($)</th>
-                <th style={TH({fontSize:12})}>C/F unitario</th>
+                <th style={TH({textAlign:"left"})}>Categoría</th>
+                <th style={TH()}>Precio ($)</th>
+                <th style={TH({color:"#7C3AED"})}>C. Cerrado ($)</th>
+                <th style={TH({color:"#B45309"})}>C. Abierto ($)</th>
+                <th style={TH()}>C/F unitario</th>
               </tr>
             </thead>
             <tbody>{CATS.map(c=>{
-              const pr=p.prices[c.id]||0;
-              const cc=p.costosCerrados[c.id]||0;
-              const ca=p.costosAbiertos[c.id]||0;
-              const ct=cc+ca;
-              const cf=pr>0?(ct/pr*100):0;
+              const pr=p.prices[c.id]||0,cc=p.costosCerrados[c.id]||0,ca=p.costosAbiertos[c.id]||0;
+              const ct=cc+ca,cf=pr>0?(ct/pr*100):0;
               return(
                 <tr key={c.id}>
                   <td style={TD({fontWeight:500})}>{c.label}</td>
-                  <td style={TD({textAlign:"right"})}>
-                    <input type="number" min={0} value={pr} onChange={e=>upd("prices",c.id,e.target.value)} style={{...inp,width:140,textAlign:"right"}}/>
-                  </td>
-                  <td style={TD({textAlign:"right"})}>
-                    <input type="number" min={0} value={cc} onChange={e=>upd("costosCerrados",c.id,e.target.value)} style={{...inp,width:140,textAlign:"right"}}/>
-                  </td>
-                  <td style={TD({textAlign:"right"})}>
-                    <input type="number" min={0} value={ca} onChange={e=>upd("costosAbiertos",c.id,e.target.value)} style={{...inp,width:140,textAlign:"right"}}/>
-                  </td>
-                  <td style={TD({textAlign:"right"})}>
-                    {pr>0&&<span style={{...badge(cfColor(cf),cfBg(cf)),fontSize:11}}>{cf.toFixed(0)}%</span>}
-                  </td>
+                  <td style={TD({textAlign:"right"})}><input type="number" min={0} value={pr} onChange={e=>upd("prices",c.id,e.target.value)} style={{...inp,width:130,textAlign:"right"}}/></td>
+                  <td style={TD({textAlign:"right"})}><input type="number" min={0} value={cc} onChange={e=>upd("costosCerrados",c.id,e.target.value)} style={{...inp,width:130,textAlign:"right"}}/></td>
+                  <td style={TD({textAlign:"right"})}><input type="number" min={0} value={ca} onChange={e=>upd("costosAbiertos",c.id,e.target.value)} style={{...inp,width:130,textAlign:"right"}}/></td>
+                  <td style={TD({textAlign:"right"})}>{pr>0&&<span style={{...badge(cfColor(cf),cfBg(cf)),fontSize:11}}>{cf.toFixed(0)}%</span>}</td>
                 </tr>
               );
             })}</tbody>
           </table>
         </div>
         <div style={{marginTop:"1.25rem",display:"flex",alignItems:"center",gap:12}}>
-          <button onClick={()=>{onSave({...loc});setOk(true);setTimeout(()=>setOk(false),2500);}} style={btnP}>{ok?"✓ Guardado":"Guardar planes"}</button>
+          <button onClick={()=>{onSave(JSON.parse(JSON.stringify(loc)));setOk(true);setTimeout(()=>setOk(false),2500);}} style={btnP}>{ok?"✓ Guardado":"Guardar"}</button>
           {ok&&<span style={{fontSize:13,color:"#16a34a",fontFamily:FONT}}>Guardado correctamente</span>}
         </div>
       </div>
@@ -259,10 +303,10 @@ function Cotizador({planes,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
   const [cols,setCols]=useState([]);
-  const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:""});
-  // mapeo de planes externos a planes Omint
-  const [planMapping,setPlanMapping]=useState({});// {planExterno: planOmint|""}
-  const [adjPrices,setAdjPrices]=useState({});// {planId: {catId: price}}
+  const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});
+  const [globalZona,setGlobalZona]=useState("AMBA"); // used when no zonaCol
+  const [planMapping,setPlanMapping]=useState({});
+  const [adjPrices,setAdjPrices]=useState({});// {zona_plan: {catId: price}}
   const [empresa,setEmpresa]=useState("");
   const [showSug,setShowSug]=useState(false);
   const [chat,setChat]=useState([]);
@@ -272,42 +316,52 @@ function Cotizador({planes,onSaveQuote,knownEmpresas,apiKey}){
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
-  // Planes externos únicos detectados en la nómina
-  const externalPlans=emps&&map.planCol?[...new Set(emps.map(e=>e[map.planCol]).filter(Boolean))]:[];
   const isOmintPlan=p=>PLAN_IDS.includes(p);
+  const externalPlans=emps&&map.planCol?[...new Set(emps.map(e=>e[map.planCol]).filter(Boolean))]:[];
+  const hasZonaCol=map.zonaCol&&map.zonaCol!=="";
+  const needsMapeo=externalPlans.some(p=>!isOmintPlan(p));
 
-  // Construir grupos: {planId: [emps]}
-  function buildGroups(){
-    if(!emps||!map.titAge||!map.ku)return[];
-    const groups={};
-    emps.forEach(e=>{
-      let planId="sin_plan";
-      if(map.planCol&&e[map.planCol]){
-        const ext=e[map.planCol];
-        if(isOmintPlan(ext))planId=ext;
-        else planId=planMapping[ext]||"sin_plan";
-      }
-      if(!groups[planId])groups[planId]=[];
-      groups[planId].push(e);
-    });
-    return Object.entries(groups).filter(([k])=>k!=="sin_plan"&&planes[k]).map(([planId,empList])=>({planId,empList}));
+  function getEmpZona(e){
+    if(hasZonaCol&&e[map.zonaCol]){
+      const z=String(e[map.zonaCol]).trim();
+      return ZONA_IDS.find(zi=>zi.toLowerCase()===z.toLowerCase())||globalZona;
+    }
+    return globalZona;
+  }
+  function getEmpPlan(e){
+    if(!map.planCol||!e[map.planCol])return null;
+    const ext=e[map.planCol];
+    if(isOmintPlan(ext))return ext;
+    return planMapping[ext]||null;
   }
 
-  const groups=buildGroups();
+  function buildGroups(){
+    if(!emps||!map.titAge||!map.ku)return[];
+    const groupMap={};
+    emps.forEach(e=>{
+      const zona=getEmpZona(e);
+      const planId=getEmpPlan(e);
+      if(!planId)return;
+      const key=`${zona}||${planId}`;
+      if(!groupMap[key])groupMap[key]={zona,planId,empList:[]};
+      groupMap[key].empList.push(e);
+    });
+    return Object.values(groupMap).sort((a,b)=>a.zona.localeCompare(b.zona)||a.planId.localeCompare(b.planId));
+  }
 
-  // Resultados por plan con precios ajustados
   function buildResults(){
-    return groups.map(({planId,empList})=>{
-      const base=planes[planId]||JSON.parse(JSON.stringify(EMPTY_PLAN));
-      const adjForPlan=adjPrices[planId]||{};
+    return buildGroups().map(({zona,planId,empList})=>{
+      const adjKey=`${zona}||${planId}`;
+      const base=planes?.[zona]?.[planId]||JSON.parse(JSON.stringify(EMPTY_PLAN));
+      const adjForGroup=adjPrices[adjKey]||{};
       const adjPlanData={
-        prices:Object.fromEntries(CATS.map(c=>[c.id,adjForPlan[c.id]!==undefined?adjForPlan[c.id]:base.prices[c.id]||0])),
+        prices:Object.fromEntries(CATS.map(c=>[c.id,adjForGroup[c.id]!==undefined?adjForGroup[c.id]:base.prices[c.id]||0])),
         costosCerrados:{...base.costosCerrados},
         costosAbiertos:{...base.costosAbiertos},
       };
       const bd=calcGroupBD(empList,map,adjPlanData);
-      const mapping=map.planCol?externalPlans.filter(p=>planMapping[p]===planId||p===planId).map(p=>({from:p,to:planId})):[];
-      return{planId,empList,bd,mapping,adjPlanData,basePrices:base.prices};
+      const mapping=map.planCol?externalPlans.filter(p=>(planMapping[p]===planId||p===planId)&&!isOmintPlan(p)).map(p=>({from:p,to:planId})):[];
+      return{zona,planId,empList,bd,mapping,adjKey,basePrices:base.prices};
     });
   }
 
@@ -328,12 +382,13 @@ function Cotizador({planes,onSaveQuote,knownEmpresas,apiKey}){
     if(!apiKey){alert("Configurá tu API key de OpenRouter en Configuración.");return;}
     const m=chatIn.trim();setChatIn("");
     const hist=[...chat,{role:"user",content:m}];setChat(hist);setCL(true);
-    const resumen=results.map(r=>`${r.planId}: ${r.bd.totalSocios} socios, fac=$${fmt(r.bd.totalFac)}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join(" | ");
-    const sys=`Sos el asistente comercial de Omint. Métrica clave: C/F (Costo/Facturación), menor es mejor.
-PLANES Y RESULTADOS: ${resumen}
+    const resumen=results.map(r=>`${r.zona}/${r.planId}: ${r.bd.totalSocios} socios, fac=$${fmt(r.bd.totalFac)}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join(" | ");
+    const sys=`Sos el asistente comercial de Omint. Métrica clave: C/F (Costo/Facturación).
+GRUPOS (Zona/Plan): ${resumen}
 TOTAL: fac=$${fmt(grandTotalFac)}, C/F=${grandCF.toFixed(1)}%
 Referencia: C/F ≤70% excelente, 70-82% aceptable, >82% alto.
-Al ajustar precios de UN plan respondé con el planId y el JSON de precios:
+Al ajustar precios indicá ZONA y PLAN + JSON:
+ZONA: AMBA
 PLAN: 4500_PYME
 \`\`\`json
 {"s0_25":0,"s26_34":0,"s35_54":0,"s55_59":0,"s60plus":0,"h1":0,"h2plus":0}
@@ -345,31 +400,30 @@ PLAN: 4500_PYME
       });
       const data=await res.json();
       const full=data.choices?.[0]?.message?.content||data.error?.message||"Error.";
-      // detect plan
+      const zonaMatch=full.match(/ZONA:\s*(\S+)/);
       const planMatch=full.match(/PLAN:\s*(\S+)/);
-      const json=exJSON(full);const expl=stripJ(full.replace(/PLAN:\s*\S+/,""))||full;
-      if(json&&planMatch){
-        const pid=planMatch[1].trim();
-        if(PLAN_IDS.includes(pid)){
-          const u={};CATS.forEach(c=>{u[c.id]=json[c.id]!==undefined?parseFloat(json[c.id])||0:(planes[pid]?.prices[c.id]||0);});
-          setAdjPrices(prev=>({...prev,[pid]:u}));
-        }
+      const json=exJSON(full);const expl=stripJ(full.replace(/ZONA:\s*\S+/,"").replace(/PLAN:\s*\S+/,""))||full;
+      if(json&&zonaMatch&&planMatch){
+        const zid=zonaMatch[1].trim(),pid=planMatch[1].trim();
+        const adjKey=`${zid}||${pid}`;
+        const base=planes?.[zid]?.[pid]||JSON.parse(JSON.stringify(EMPTY_PLAN));
+        const u={};CATS.forEach(c=>{u[c.id]=json[c.id]!==undefined?parseFloat(json[c.id])||0:base.prices[c.id]||0;});
+        setAdjPrices(prev=>({...prev,[adjKey]:u}));
       }
-      setChat([...hist,{role:"assistant",content:expl,upd:!!(json&&planMatch)}]);
+      setChat([...hist,{role:"assistant",content:expl,upd:!!(json&&zonaMatch&&planMatch)}]);
     }catch(e){setChat([...hist,{role:"assistant",content:"Error: "+e.message}]);}
     setCL(false);
   }
 
   async function guardar(status){
     if(results.length===0)return;
-    onSaveQuote({id:Date.now().toString(),empresa:empresa.trim()||"Sin nombre",status,fecha:new Date().toISOString(),total:grandTotalFac,totalFac:grandTotalFac,totalCosto:grandTotalCosto,cfTotal:grandCF,socios:emps.length});
+    onSaveQuote({id:Date.now().toString(),empresa:empresa.trim()||"Sin nombre",status,fecha:new Date().toISOString(),total:grandTotalFac,totalFac:grandTotalFac,totalCosto:grandTotalCosto,cfTotal:grandCF,socios:emps?emps.length:0});
     setSaveMsg(status==="cerrado"?"✓ Guardado como cerrado":"✓ Guardado como abierto");
     setTimeout(()=>setSaveMsg(""),2500);
   }
 
   const stepN=sub==="mapeo"?2:sub;
-  const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo de planes"},{n:3,l:"Cotización"}];
-  const needsMapeo=externalPlans.some(p=>!isOmintPlan(p));
+  const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo"},{n:3,l:"Cotización"}];
 
   return(
     <div>
@@ -389,7 +443,8 @@ PLAN: 4500_PYME
       {sub===1&&(
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem"}}>
-            <div><h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Cargar nómina</h3><p style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>El template incluye la columna PLAN_ACTUAL para mapear planes competidores.</p></div>
+            <div><h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Cargar nómina</h3>
+            <p style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>El template incluye columnas PLAN_ACTUAL y ZONA.</p></div>
             <button onClick={downloadTemplate} style={{...btnS,fontSize:12}}>↓ Template nómina</button>
           </div>
           {!emps?(
@@ -402,16 +457,30 @@ PLAN: 4500_PYME
             <div>
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#D1FAE5",borderRadius:8,marginBottom:"1.25rem",border:"1px solid #A7F3D0"}}>
                 <span>✅</span><span style={{fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{emps.length} empleados cargados</span>
-                <button onClick={()=>{setEmps(null);setCols([]);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:""});setPlanMapping({});}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",fontFamily:FONT}}>Cambiar</button>
+                <button onClick={()=>{setEmps(null);setCols([]);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});setPlanMapping({});}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",fontFamily:FONT}}>Cambiar</button>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:"1.25rem"}}>
-                {[{k:"name",l:"Nombre",req:false},{k:"titAge",l:"Edad titular *",req:true},{k:"spAge",l:"Edad cónyuge",req:false},{k:"ku",l:"N° hijos <25 *",req:true},{k:"k25",l:"N° hijos ≥25",req:false},{k:"planCol",l:"Columna de plan",req:false}].map(({k,l,req})=>(
+                {[{k:"name",l:"Nombre",req:false},{k:"titAge",l:"Edad titular *",req:true},{k:"spAge",l:"Edad cónyuge",req:false},{k:"ku",l:"N° hijos <25 *",req:true},{k:"k25",l:"N° hijos ≥25",req:false},{k:"planCol",l:"Columna de plan",req:false},{k:"zonaCol",l:"Columna de zona",req:false}].map(({k,l,req})=>(
                   <div key={k}>
                     <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>{l}</label>
                     <select value={map[k]} onChange={e=>setMap(p=>({...p,[k]:e.target.value}))} style={{...inp,background:"#fff"}}><option value="">{req?"Seleccionar…":"No aplica"}</option>{cols.map(c=><option key={c} value={c}>{c}</option>)}</select>
                   </div>
                 ))}
               </div>
+              {/* Zona global si no hay columna */}
+              {!hasZonaCol&&(
+                <div style={{padding:"12px 16px",background:BLUE_LT,borderRadius:8,marginBottom:"1rem",border:`1px solid ${BORDER}`}}>
+                  <p style={{fontSize:12,color:BLUE,fontWeight:600,marginBottom:8,fontFamily:FONT}}>No hay columna de zona — asigná una zona para todos los empleados:</p>
+                  <div style={{display:"flex",gap:8}}>
+                    {ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z]||{c:BLUE,bg:BLUE_LT};return(
+                      <button key={z} onClick={()=>setGlobalZona(z)} style={{padding:"6px 14px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:globalZona===z?700:400,
+                        background:globalZona===z?zc2.c:"#fff",color:globalZona===z?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>
+                        {z}
+                      </button>
+                    );})}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {emps&&map.titAge&&map.ku&&(
@@ -422,42 +491,44 @@ PLAN: 4500_PYME
         </div>
       )}
 
-      {/* STEP 2: MAPEO DE PLANES */}
+      {/* STEP 2: MAPEO */}
       {sub==="mapeo"&&(
         <div>
           <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Mapeo de planes</h3>
-          <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Asigná cada plan actual de la nómina al plan Omint equivalente.</p>
+          <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Asigná cada plan externo al plan Omint equivalente.</p>
           <div style={card()}>
-            <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",maxWidth:600}}>
-              <thead><tr>
-                <th style={TH({textAlign:"left"})}>Plan en la nómina</th>
-                <th style={TH({textAlign:"left"})}>Empleados</th>
-                <th style={TH({textAlign:"left"})}>Mapear a plan Omint</th>
-              </tr></thead>
-              <tbody>{externalPlans.map(ext=>{
-                const count=emps.filter(e=>e[map.planCol]===ext).length;
-                const alreadyOmint=isOmintPlan(ext);
-                return(
-                  <tr key={ext}>
-                    <td style={TD({fontWeight:500})}>
-                      {ext}
-                      {alreadyOmint&&<span style={{...badge(BLUE,BLUE_LT),marginLeft:8,fontSize:10}}>Omint</span>}
-                    </td>
-                    <td style={TD({color:"#6B7280"})}>{count}</td>
-                    <td style={TD()}>
-                      {alreadyOmint?(
-                        <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>→ {ext}</span>
-                      ):(
-                        <select value={planMapping[ext]||""} onChange={e=>setPlanMapping(p=>({...p,[ext]:e.target.value}))} style={{...inp,width:180}}>
-                          <option value="">No cotizar</option>
-                          {PLAN_IDS.map(id=><option key={id} value={id}>{id}</option>)}
-                        </select>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}</tbody>
-            </table>
+            <div style={{overflowX:"auto"}}>
+              <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",minWidth:460}}>
+                <thead><tr>
+                  <th style={TH({textAlign:"left"})}>Plan en la nómina</th>
+                  <th style={TH({textAlign:"right"})}>Empleados</th>
+                  <th style={TH({textAlign:"left"})}>Mapear a plan Omint</th>
+                </tr></thead>
+                <tbody>{externalPlans.map(ext=>{
+                  const count=emps.filter(e=>e[map.planCol]===ext).length;
+                  const alreadyOmint=isOmintPlan(ext);
+                  return(
+                    <tr key={ext}>
+                      <td style={TD({fontWeight:500})}>
+                        {ext}
+                        {alreadyOmint&&<span style={{...badge(BLUE,BLUE_LT),marginLeft:8,fontSize:10}}>Omint</span>}
+                      </td>
+                      <td style={TD({textAlign:"right",color:"#6B7280"})}>{count}</td>
+                      <td style={TD()}>
+                        {alreadyOmint?(
+                          <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>→ {ext}</span>
+                        ):(
+                          <select value={planMapping[ext]||""} onChange={e=>setPlanMapping(p=>({...p,[ext]:e.target.value}))} style={{...inp,width:160}}>
+                            <option value="">No cotizar</option>
+                            {PLAN_IDS.map(id=><option key={id} value={id}>{id}</option>)}
+                          </select>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            </div>
           </div>
           <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
             <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
@@ -481,7 +552,7 @@ PLAN: 4500_PYME
             </div>
             <div style={{display:"flex",gap:8,paddingTop:26,flexWrap:"wrap"}}>
               {Object.keys(adjPrices).length>0&&<button onClick={()=>{setAdjPrices({});setChat([]);}} style={{...btnS,fontSize:12}}>↺ Resetear</button>}
-              <button onClick={()=>exportXLS(results,empresa,emps,planes)} style={btnP}>↓ Exportar cotización</button>
+              <button onClick={()=>exportXLS(results,empresa,emps)} style={btnP}>↓ Exportar cotización</button>
               <button onClick={()=>guardar("abierto")} style={btnS}>Guardar abierto</button>
               <button onClick={()=>guardar("cerrado")} style={btnP}>Guardar cerrado</button>
             </div>
@@ -493,7 +564,7 @@ PLAN: 4500_PYME
             <p style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.6)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Ajuste de precios con IA</p>
             <div style={{display:"flex",gap:8}}>
               <input value={chatIn} onChange={e=>setChatIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendChat()}
-                placeholder='Ej: "Bajá el C/F del 6500_PYME al 75%" · "¿Qué plan tiene el C/F más alto?"'
+                placeholder='Ej: "Bajá el C/F de AMBA 6500_PYME al 75%" · "¿Qué zona tiene el C/F más alto?"'
                 disabled={chatLoading}
                 style={{...inp,flex:1,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff"}}/>
               <button onClick={sendChat} disabled={!chatIn.trim()||chatLoading}
@@ -525,79 +596,79 @@ PLAN: 4500_PYME
             ))}
           </div>
 
-          {/* Resumen por plan */}
+          {/* Resumen por zona+plan */}
           {results.length>1&&(
             <div style={{...card(),marginBottom:"1.5rem"}}>
-              <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:"1rem",fontFamily:FONT}}>Resumen por plan</p>
+              <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:"1rem",fontFamily:FONT}}>Resumen por zona y plan</p>
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:500}}>
-                  <thead><tr>{["Plan","Socios","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
-                  <tbody>{results.map(r=>(
-                    <tr key={r.planId}>
-                      <td style={TD({fontWeight:600,color:BLUE})}>{r.planId}</td>
-                      <td style={TD({textAlign:"right",color:"#6B7280"})}>{r.bd.totalSocios}</td>
-                      <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(r.bd.totalFac)}</td>
-                      <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(r.bd.totalCosto)}</td>
-                      <td style={TD({textAlign:"right"})}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),minWidth:52,display:"inline-block",textAlign:"center"}}>{r.bd.cfTotal.toFixed(1)}%</span></td>
-                    </tr>
-                  ))}</tbody>
+                  <thead><tr>{["Zona","Plan","Socios","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i<2?"left":"right"})}>{h}</th>)}</tr></thead>
+                  <tbody>{results.map(r=>{
+                    const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
+                    return(
+                      <tr key={r.adjKey}>
+                        <td style={TD()}><span style={{...badge(zc2.c,zc2.bg),fontSize:11}}>{r.zona}</span></td>
+                        <td style={TD({fontWeight:600,color:BLUE})}>{r.planId}</td>
+                        <td style={TD({textAlign:"right",color:"#6B7280"})}>{r.bd.totalSocios}</td>
+                        <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(r.bd.totalFac)}</td>
+                        <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(r.bd.totalCosto)}</td>
+                        <td style={TD({textAlign:"right"})}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),minWidth:52,display:"inline-block",textAlign:"center"}}>{r.bd.cfTotal.toFixed(1)}%</span></td>
+                      </tr>
+                    );
+                  })}</tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* Desglose por plan */}
-          {results.map(r=>(
-            <div key={r.planId} style={{...card(),marginBottom:"1.5rem"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1rem"}}>
-                <span style={{...badge("#fff",BLUE),fontSize:13,padding:"4px 14px"}}>{r.planId}</span>
-                <span style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios</span>
-                {r.mapping.length>0&&(
-                  <span style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>
-                    ← {r.mapping.map(m=>m.from).join(", ")}
-                  </span>
-                )}
-                <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-                  <span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:12}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
+          {/* Desglose por zona+plan */}
+          {results.map(r=>{
+            const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
+            return(
+              <div key={r.adjKey} style={{...card(),marginBottom:"1.5rem"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1rem",flexWrap:"wrap"}}>
+                  <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
+                  <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planId}</span>
+                  <span style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios</span>
+                  {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
+                  <div style={{marginLeft:"auto"}}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:12}}>C/F {r.bd.cfTotal.toFixed(1)}%</span></div>
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:660}}>
+                    <thead><tr>{["Categoría","N°","Precio","C.Cerrado","C.Abierto","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {r.bd.rows.map(row=>{
+                        const hasAdj=adjPrices[r.adjKey]?.[row.id]!==undefined;
+                        return(
+                          <tr key={row.id} style={{opacity:row.count===0?0.3:1}}>
+                            <td style={TD({fontWeight:500})}>{row.label}</td>
+                            <td style={TD({textAlign:"right",color:"#6B7280"})}>{row.count}</td>
+                            <td style={TD({textAlign:"right"})}>
+                              <input type="number" min={0} value={row.precio}
+                                onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjPrices(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}}
+                                style={{width:88,textAlign:"right",fontSize:12,padding:"3px 6px",border:`1px solid ${hasAdj?BLUE:BORDER}`,borderRadius:6,color:hasAdj?BLUE:"#111827",fontFamily:FONT}}/>
+                            </td>
+                            <td style={TD({textAlign:"right",color:"#6B7280"})}>${fmt(row.cC)}</td>
+                            <td style={TD({textAlign:"right",color:"#6B7280"})}>${fmt(row.cA)}</td>
+                            <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(row.fac)}</td>
+                            <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(row.cos)}</td>
+                            <td style={TD({textAlign:"right"})}>{row.fac>0&&<span style={{...badge(cfColor(row.cf),cfBg(row.cf)),minWidth:44,display:"inline-block",textAlign:"center",fontSize:11}}>{row.cf.toFixed(0)}%</span>}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr style={{background:BLUE_LT}}>
+                        <td style={{padding:"10px 12px",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>Total</td>
+                        <td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/>
+                        <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(r.bd.totalFac)}</td>
+                        <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"#DC2626",borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(r.bd.totalCosto)}</td>
+                        <td style={{padding:"10px 12px",textAlign:"right",borderTop:`2px solid ${BLUE}`}}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontWeight:700,fontSize:12}}>{r.bd.cfTotal.toFixed(1)}%</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
-              <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:680}}>
-                  <thead><tr>{["Categoría","N°","Precio","C.Cerrado","C.Abierto","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
-                  <tbody>
-                    {r.bd.rows.map(row=>{
-                      const hasAdj=adjPrices[r.planId]?.[row.id]!==undefined;
-                      return(
-                        <tr key={row.id} style={{opacity:row.count===0?0.3:1}}>
-                          <td style={TD({fontWeight:500})}>{row.label}</td>
-                          <td style={TD({textAlign:"right",color:"#6B7280"})}>{row.count}</td>
-                          <td style={TD({textAlign:"right"})}>
-                            <input type="number" min={0} value={row.precio}
-                              onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjPrices(prev=>({...prev,[r.planId]:{...(prev[r.planId]||{}),[ row.id]:v}}));}}
-                              style={{width:88,textAlign:"right",fontSize:12,padding:"3px 6px",border:`1px solid ${hasAdj?BLUE:BORDER}`,borderRadius:6,color:hasAdj?BLUE:"#111827",fontFamily:FONT}}/>
-                          </td>
-                          <td style={TD({textAlign:"right",color:"#6B7280"})}>${fmt(row.cC)}</td>
-                          <td style={TD({textAlign:"right",color:"#6B7280"})}>${fmt(row.cA)}</td>
-                          <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(row.fac)}</td>
-                          <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(row.cos)}</td>
-                          <td style={TD({textAlign:"right"})}>
-                            {row.fac>0&&<span style={{...badge(cfColor(row.cf),cfBg(row.cf)),minWidth:44,display:"inline-block",textAlign:"center",fontSize:11}}>{row.cf.toFixed(0)}%</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    <tr style={{background:BLUE_LT}}>
-                      <td style={{padding:"10px 12px",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>Total</td>
-                      <td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/>
-                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(r.bd.totalFac)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"#DC2626",borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(r.bd.totalCosto)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"right",borderTop:`2px solid ${BLUE}`}}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontWeight:700,fontSize:12}}>{r.bd.cfTotal.toFixed(1)}%</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
+            );
+          })}
 
           {results.length===0&&(
             <div style={{...card(),textAlign:"center",padding:"3rem",color:"#9CA3AF"}}>
@@ -621,7 +692,7 @@ export default function App(){
 
   useEffect(()=>{
     const p=lsGet("omint-planes");
-    setPlanes(p||JSON.parse(JSON.stringify(DEFAULT_PLANES)));
+    setPlanes(p||buildDefaultPlanes());
     setQuotes(lsGet("omint-quotes")||[]);
     setApiKey(lsGet("omint-apikey")||"");
     setLoaded(true);
@@ -651,8 +722,7 @@ export default function App(){
             <button key={item.id} onClick={()=>setSec(item.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 1.25rem",border:"none",borderRadius:0,cursor:"pointer",lineHeight:1.4,fontFamily:FONT,
               background:sec===item.id?BLUE_LT:"transparent",
               color:sec===item.id?BLUE:item.strong?"#111827":"#6B7280",
-              fontWeight:item.strong?700:sec===item.id?600:400,
-              fontSize:item.strong?14:13,
+              fontWeight:item.strong?700:sec===item.id?600:400,fontSize:item.strong?14:13,
               borderLeft:sec===item.id?`3px solid ${BLUE}`:"3px solid transparent"}}>
               {item.label}
             </button>
@@ -674,7 +744,7 @@ export default function App(){
       </div>
       <div style={{flex:1,padding:"2rem 2.5rem",overflowY:"auto",minWidth:0}}>
         {!loaded&&<p style={{fontSize:13,color:"#9CA3AF",fontFamily:FONT}}>Cargando…</p>}
-        {loaded&&sec==="cotizador"&&<Cotizador planes={planes||DEFAULT_PLANES} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
+        {loaded&&sec==="cotizador"&&<Cotizador planes={planes||buildDefaultPlanes()} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
         {loaded&&sec==="planes"&&<PlanesVigentes planes={planes} onSave={savePlanes}/>}
         {loaded&&sec==="historial"&&<Historial quotes={quotes} onUpdate={updQuote}/>}
         {loaded&&sec==="config"&&<Configuracion apiKey={apiKey} onSave={saveApiKey}/>}
