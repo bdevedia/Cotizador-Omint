@@ -94,7 +94,6 @@ function exportXLS(bd,empresa,emps,vp,cc,ca){
   XLSX.writeFile(wb,`Cotizacion_${empresa||"empresa"}_${today.replace(/\//g,"-")}.xlsx`);
 }
 
-/* ── TABLA EDITABLE ── */
 function TablaEditable({title,subtitle,values,onSave,colorAccent}){
   const [loc,setLoc]=useState({...EMPTY_P,...(values||{})});
   const [ok,setOk]=useState(false);
@@ -125,7 +124,6 @@ function TablaEditable({title,subtitle,values,onSave,colorAccent}){
   );
 }
 
-/* ── HISTORIAL ── */
 function Historial({quotes,onUpdate}){
   const [open,setOpen]=useState({});
   const groups={};
@@ -185,7 +183,6 @@ function Historial({quotes,onUpdate}){
   );
 }
 
-/* ── CARTERA TABLE ── */
 function CarteraTable({quotes,title,emptyMsg,onUpdate}){
   const totalFac=quotes.reduce((a,q)=>a+(q.totalFac||q.total||0),0);
   const totalCosto=quotes.reduce((a,q)=>a+(q.totalCosto||0),0);
@@ -230,7 +227,6 @@ function CarteraTable({quotes,title,emptyMsg,onUpdate}){
   );
 }
 
-/* ── CONFIGURACIÓN ── */
 function Configuracion({apiKey,onSave}){
   const [k,setK]=useState(apiKey||"");const[ok,setOk]=useState(false);
   return(
@@ -238,10 +234,10 @@ function Configuracion({apiKey,onSave}){
       <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:6,fontFamily:FONT}}>Configuración</h2>
       <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>La API key se guarda localmente y se usa solo para el chat de negociación de precios.</p>
       <div style={card()}>
-        <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>API Key de Google AI Studio</label>
-        <input type="password" value={k} onChange={e=>setK(e.target.value)} placeholder="AIza..." style={{...inp,maxWidth:480,marginBottom:12}}/>
+        <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>API Key de OpenRouter</label>
+        <input type="password" value={k} onChange={e=>setK(e.target.value)} placeholder="sk-or-..." style={{...inp,maxWidth:480,marginBottom:12}}/>
         <p style={{fontSize:11,color:"#9CA3AF",marginBottom:16,fontFamily:FONT}}>
-          Conseguila gratis en <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" style={{color:BLUE}}>aistudio.google.com</a> → Get API key
+          Conseguila gratis en <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer" style={{color:BLUE}}>openrouter.ai</a> → Management Keys → Create key
         </p>
         <button onClick={()=>{onSave(k);setOk(true);setTimeout(()=>setOk(false),2500);}} style={btnP}>{ok?"✓ Guardado":"Guardar API key"}</button>
       </div>
@@ -249,7 +245,6 @@ function Configuracion({apiKey,onSave}){
   );
 }
 
-/* ── COTIZADOR ── */
 function Cotizador({vigentePrices,costosCerrados,costosAbiertos,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
@@ -281,7 +276,7 @@ function Cotizador({vigentePrices,costosCerrados,costosAbiertos,onSaveQuote,know
 
   async function sendChat(){
     if(!chatIn.trim()||chatLoading||!bd)return;
-    if(!apiKey){alert("Configurá tu API key de Google AI Studio en Configuración.");return;}
+    if(!apiKey){alert("Configurá tu API key de OpenRouter en Configuración.");return;}
     const m=chatIn.trim();setChatIn("");
     const hist=[...chat,{role:"user",content:m}];setChat(hist);setCL(true);
     const sys=`Sos el asistente comercial de Omint. La métrica clave es C/F (Costo/Facturación). Menor es mejor.
@@ -294,18 +289,21 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
 {"s0_25":0,"s26_34":0,"s35_54":0,"s55_59":0,"s60plus":0,"h1":0,"h2plus":0}
 \`\`\``;
     try{
-      const prompt=sys+"\n\n"+hist.map(x=>(x.role==="user"?"Vos: ":"IA: ")+x.content).join("\n");
-      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,{
+      const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}]})
+        headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},
+        body:JSON.stringify({
+          model:"meta-llama/llama-3.3-70b-instruct:free",
+          max_tokens:700,
+          messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]
+        })
       });
       const data=await res.json();
-      const full=data.candidates?.[0]?.content?.parts?.[0]?.text||data.error?.message||"Error.";
+      const full=data.choices?.[0]?.message?.content||data.error?.message||"Error.";
       const json=exJSON(full);const expl=stripJ(full)||full;
       if(json){const u={};CATS.forEach(c=>{u[c.id]=json[c.id]!==undefined?parseFloat(json[c.id])||0:effP[c.id];});setAdjPrices(u);}
       setChat([...hist,{role:"assistant",content:expl,upd:!!json}]);
-    }catch(e){setChat([...hist,{role:"assistant",content:"Error de conexión: "+e.message}]);}
+    }catch(e){setChat([...hist,{role:"assistant",content:"Error: "+e.message}]);}
     setCL(false);
   }
 
@@ -428,7 +426,6 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
           </div>
           {saveMsg&&<div style={{padding:"10px 16px",background:"#D1FAE5",borderRadius:8,fontSize:13,color:"#065F46",fontWeight:600,marginBottom:"1rem",fontFamily:FONT}}>{saveMsg}</div>}
 
-          {/* IA — barra arriba */}
           <div style={{background:BLUE,borderRadius:12,padding:"16px 20px",marginBottom:"1.5rem"}}>
             <p style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.6)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Ajuste de precios con IA</p>
             <div style={{display:"flex",gap:8}}>
@@ -465,7 +462,6 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
             )}
           </div>
 
-          {/* KPIs */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:"1.5rem"}}>
             {[
               {l:"Socios",v:emps.length,bg:"#fff"},
@@ -481,7 +477,6 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
             ))}
           </div>
 
-          {/* Tabla full width */}
           <div style={card()}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr>{["Categoría","N°","Precio","C.Cerrado","C.Abierto","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
@@ -525,7 +520,6 @@ Al ajustar precios respondé con explicación corta + JSON con los 7 valores:
   );
 }
 
-/* ── APP SHELL ── */
 export default function App(){
   const [sec,setSec]=useState("cotizador");
   const [vp,setVp]=useState(null);
