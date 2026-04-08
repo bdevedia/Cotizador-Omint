@@ -6,74 +6,70 @@ const OMINT_LOGO = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1
 const FONT="'Plus Jakarta Sans',sans-serif";
 const BLUE="#1B2A7B",BLUE_LT="#EEF1FB",BORDER="#E0E4F0",GRAY="#F7F8FC";
 
-// ─── STORAGE ────────────────────────────────────────────────────────────────
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
 function lsGet(k,def=null){try{const v=localStorage.getItem(k);return v!==null?JSON.parse(v):def;}catch{return def;}}
 
-// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+// ── CATEGORÍAS (rangos corregidos: 26-35, 36-54) ─────────────────────────────
 const CATS=[
-  {id:"s0_25",label:"Socio 0–25"},{id:"s26_34",label:"Socio 26–34"},
-  {id:"s35_54",label:"Socio 35–54"},{id:"s55_59",label:"Socio 55–59"},
-  {id:"s60plus",label:"Socio 60+"},{id:"h1",label:"H1"},{id:"h2plus",label:"H2+"},
+  {id:"s0_25",  label:"Socio 0–25"},
+  {id:"s26_34", label:"Socio 26–35"},
+  {id:"s35_54", label:"Socio 36–54"},
+  {id:"s55_59", label:"Socio 55–59"},
+  {id:"s60plus",label:"Socio 60+"},
+  {id:"h1",     label:"H1"},
+  {id:"h2plus", label:"H2+"},
 ];
 const CAT_IDS=CATS.map(c=>c.id);
 const EMPTY_CATS=Object.fromEntries(CAT_IDS.map(k=>[k,0]));
 
 const ZONA_IDS=["AMBA","Córdoba","Mendoza"];
 const ZONA_COLORS={AMBA:{c:"#1B2A7B",bg:"#EEF1FB"},Córdoba:{c:"#92400E",bg:"#FEF3C7"},Mendoza:{c:"#065F46",bg:"#D1FAE5"}};
-const BANDA_IDS=["1-10","11-99","100-199","200-499"];
-const BANDA_LABELS={"1-10":"1 a 10 cápitas","11-99":"11 a 99 cápitas","100-199":"100 a 199 cápitas","200-499":"200 a 499 cápitas"};
-// col indices in precios sheet: s0_25=1,s26_34=2,s35_54=3,s55_59=4,s60plus=5,h1=7,h2plus=8
-const PRECIO_COLS=[1,2,3,4,5,7,8];
+const BANDA="200-499"; // siempre fijo
+const PRECIO_COLS=[1,2,3,4,5,7,8]; // columnas en el XLS de precios
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-function catAge(a){if(a<=25)return"s0_25";if(a<=34)return"s26_34";if(a<=54)return"s35_54";if(a<=59)return"s55_59";return"s60plus";}
+// Rangos de edad corregidos: ≤25, ≤35, ≤54, ≤59, 60+
+function catAge(a){if(a<=25)return"s0_25";if(a<=35)return"s26_34";if(a<=54)return"s35_54";if(a<=59)return"s55_59";return"s60plus";}
 function cfColor(cf){return cf<=70?"#16A34A":cf<=82?"#CA8A04":"#DC2626";}
 function cfBg(cf){return cf<=70?"#D1FAE5":cf<=82?"#FEF3C7":"#FEF2F2";}
 function cfLabel(cf){return cf<=70?"Excelente":cf<=82?"Aceptable":"Alto";}
-function autoBanda(n){if(n<=10)return"1-10";if(n<=99)return"11-99";if(n<=199)return"100-199";return"200-499";}
 const fmt=n=>(+n).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtD=d=>new Date(d).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"});
 function exJSON(t){const m=t.match(/```json\s*([\s\S]*?)```/);if(m){try{return JSON.parse(m[1]);}catch{}}try{const m2=t.match(/\{[\s\S]*?\}/);if(m2)return JSON.parse(m2[0]);}catch{}return null;}
 function stripJ(t){return t.replace(/```json[\s\S]*?```/g,"").replace(/\{[^}]*\}/g,"").trim();}
 
-// ─── PARSERS (browser-side) ───────────────────────────────────────────────────
+// ── TIER para detección de inversión de precios ───────────────────────────────
+function planTier(id){const m=String(id).match(/^(\d+)/);return m?parseInt(m[1]):0;}
+
+// ── PARSERS ───────────────────────────────────────────────────────────────────
 function parsePreciosSheet(rows){
-  // rows from sheet_to_json with header:1
-  const BAND_KEYS={"1 a 10":BANDA_IDS[0],"11 a 99":BANDA_IDS[1],"100 a 199":BANDA_IDS[2],"200 a 499":BANDA_IDS[3]};
-  const plans={};
-  let cur=null;
+  const plans={};let cur=null;
   rows.forEach(row=>{
     if(!row||row[0]==null)return;
     const v=String(row[0]).trim();
-    if(v.startsWith("Plan ")){cur=v.slice(5).trim();plans[cur]={};}
-    else if(cur){
-      const bk=Object.keys(BAND_KEYS).find(b=>v.includes(b));
-      if(bk){
-        const banda=BAND_KEYS[bk];
-        const nums=PRECIO_COLS.map(i=>{const x=row[i];return typeof x==="number"?Math.round(x):null;});
-        if(nums.some(x=>x!==null&&x>0)){
-          plans[cur][banda]={s0_25:nums[0],s26_34:nums[1],s35_54:nums[2],s55_59:nums[3],s60plus:nums[4],h1:nums[5],h2plus:nums[6]};
-        }
+    if(v.startsWith("Plan ")){cur=v.slice(5).trim();plans[cur]=null;}
+    else if(cur&&v.includes("200")){
+      const nums=PRECIO_COLS.map(i=>{const x=row[i];return typeof x==="number"?Math.round(x):0;});
+      if(nums.some(x=>x>0)){
+        plans[cur]={s0_25:nums[0],s26_34:nums[1],s35_54:nums[2],s55_59:nums[3],s60plus:nums[4],h1:nums[5],h2plus:nums[6]};
+        cur=null; // tomamos solo el primer "200" encontrado por plan
       }
     }
   });
-  return plans;
+  // eliminar planes sin datos
+  return Object.fromEntries(Object.entries(plans).filter(([,v])=>v!==null));
 }
 
 function parsePreciosFile(file){
   return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onerror=rej;
+    const r=new FileReader();r.onerror=rej;
     r.onload=e=>{
       try{
         const wb=XLSX.read(e.target.result,{type:"binary"});
-        const zonaSheets={AMBA:"1",Córdoba:"2",Mendoza:"7"};
+        const map={AMBA:"1",Córdoba:"2",Mendoza:"7"};
         const result={};
-        Object.entries(zonaSheets).forEach(([zona,sn])=>{
-          const ws=wb.Sheets[sn];if(!ws)return;
-          const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-          result[zona]=parsePreciosSheet(rows);
+        Object.entries(map).forEach(([z,s])=>{
+          const ws=wb.Sheets[s];if(!ws)return;
+          result[z]=parsePreciosSheet(XLSX.utils.sheet_to_json(ws,{header:1,defval:null}));
         });
         res(result);
       }catch(err){rej(err);}
@@ -84,8 +80,7 @@ function parsePreciosFile(file){
 
 function parseCostosFile(file){
   return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onerror=rej;
+    const r=new FileReader();r.onerror=rej;
     r.onload=e=>{
       try{
         const wb=XLSX.read(e.target.result,{type:"binary"});
@@ -97,11 +92,9 @@ function parseCostosFile(file){
           if(!row||row[0]==null)return;
           const v=String(row[0]).trim();
           if(v.startsWith("Plan ")){
-            const planId=v.slice(5).trim();
+            const pid=v.slice(5).trim();
             const nums=PRECIO_COLS.map(i=>{const x=row[i];return typeof x==="number"?Math.round(x):0;});
-            if(nums.some(x=>x>0)){
-              costs[planId]={s0_25:nums[0],s26_34:nums[1],s35_54:nums[2],s55_59:nums[3],s60plus:nums[4],h1:nums[5],h2plus:nums[6]};
-            }
+            if(nums.some(x=>x>0))costs[pid]={s0_25:nums[0],s26_34:nums[1],s35_54:nums[2],s55_59:nums[3],s60plus:nums[4],h1:nums[5],h2plus:nums[6]};
           }
         });
         res(costs);
@@ -111,7 +104,7 @@ function parseCostosFile(file){
   });
 }
 
-// ─── BD CALC ─────────────────────────────────────────────────────────────────
+// ── CALC BD ───────────────────────────────────────────────────────────────────
 function calcBD(emps,map,prices,costos){
   const c={...EMPTY_CATS};
   emps.forEach(e=>{
@@ -129,7 +122,209 @@ function calcBD(emps,map,prices,costos){
   return{rows,totalFac:tf,totalCosto:tc,cfTotal:tf>0?tc/tf*100:0,totalSocios:emps.length};
 }
 
-// ─── STYLE PRIMITIVES ────────────────────────────────────────────────────────
+// ── DETECCIÓN INVERSIÓN DE PRECIOS ────────────────────────────────────────────
+function checkPriceInversions(results){
+  const violations=[];
+  const byZona={};
+  results.forEach(r=>{if(!byZona[r.zona])byZona[r.zona]=[];byZona[r.zona].push(r);});
+  Object.entries(byZona).forEach(([zona,list])=>{
+    const sorted=[...list].sort((a,b)=>planTier(a.planId)-planTier(b.planId));
+    for(let i=0;i<sorted.length-1;i++){
+      for(let j=i+1;j<sorted.length;j++){
+        const r1=sorted[i],r2=sorted[j];
+        if(planTier(r1.planId)>=planTier(r2.planId))continue;
+        CATS.forEach(cat=>{
+          const p1=r1.bd.rows.find(r=>r.id===cat.id)?.precio||0;
+          const p2=r2.bd.rows.find(r=>r.id===cat.id)?.precio||0;
+          if(p1>0&&p2>0&&p1>p2){
+            violations.push({zona,cat:cat.label,plan1:r1.planId,price1:p1,plan2:r2.planId,price2:p2});
+          }
+        });
+      }
+    }
+  });
+  return violations;
+}
+
+// ── GENERADOR DE PROPUESTA HTML (para imprimir como PDF) ──────────────────────
+function fechaLarga(d){
+  if(!d)d=new Date();
+  const months=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const date=typeof d==="string"?new Date(d+"T12:00:00"):d;
+  return`${date.getDate()} de ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+function generateProposalHTML(cfg,results){
+  const {empresa,fecha,validez,formato,planesNombres,textoExtra}=cfg;
+
+  // Para ponderado: calcular precio promedio ponderado 0-59
+  function ponderado(result){
+    const rows=result.bd.rows;
+    const non60=rows.filter(r=>r.id!=="s60plus");
+    const total=non60.reduce((a,r)=>a+r.count,0);
+    const wavg=total>0?non60.reduce((a,r)=>a+r.precio*r.count,0)/total:0;
+    const p60=rows.find(r=>r.id==="s60plus")?.precio||0;
+    return{precio0_59:Math.round(wavg),precio60plus:p60};
+  }
+
+  const PLAN_COLS=[
+    {id:"s0_25",header:"00 - 25"},
+    {id:"s26_34",header:"26 - 35"},
+    {id:"s35_54",header:"36 - 54"},
+    {id:"s55_59",header:"55 - 59"},
+    {id:"s60plus",header:"60 +"},
+    {id:"h1",header:"Hijo 1"},
+    {id:"h2plus",header:"Hijo 2 o +"},
+  ];
+
+  const planColors=["#F5A623","#E8941A","#DB8310","#CE7207","#C16200"];
+
+  let tableHTML="";
+  if(formato==="ponderado"){
+    tableHTML=`
+    <table class="prop-table">
+      <thead>
+        <tr>
+          <th class="th-plan">Plan</th>
+          <th class="th-data">0 a 59 años</th>
+          <th class="th-data">60+ años</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${results.map((r,i)=>{
+          const{precio0_59,precio60plus}=ponderado(r);
+          const nombre=planesNombres[r.adjKey]||r.planId;
+          return`<tr>
+            <td class="td-plan" style="background:${planColors[i%planColors.length]}">${nombre}</td>
+            <td class="td-data">$ ${fmt(precio0_59)}</td>
+            <td class="td-data">$ ${fmt(precio60plus)}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+  }else{
+    tableHTML=`
+    <table class="prop-table prop-table-full">
+      <thead>
+        <tr>
+          <th colspan="5" class="th-group">Adulto / Cónyuge / FAC / Hijo mayor 25</th>
+          <th colspan="2" class="th-group-alt">Hijo menor 25</th>
+        </tr>
+        <tr>
+          <th class="th-plan">Plan Omint</th>
+          ${PLAN_COLS.filter(c=>c.id!=="h1"&&c.id!=="h2plus").map(c=>`<th class="th-data-sm">${c.header}</th>`).join("")}
+          <th class="th-data-sm th-alt">Hijo 1</th>
+          <th class="th-data-sm th-alt">Hijo 2 o +</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${results.map((r,i)=>{
+          const nombre=planesNombres[r.adjKey]||r.planId;
+          return`<tr>
+            <td class="td-plan" style="background:${planColors[i%planColors.length]}">${nombre}</td>
+            ${PLAN_COLS.map(col=>{
+              const row=r.bd.rows.find(x=>x.id===col.id);
+              const cls=col.id==="h1"||col.id==="h2plus"?"td-data-sm td-alt":"td-data-sm";
+              return`<td class="${cls}">$ ${fmt(row?.precio||0)}</td>`;
+            }).join("")}
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+  }
+
+  const notas=[];
+  notas.push("Los precios no incluyen IVA.");
+  if(formato==="ponderado")notas.push("Los valores ofrecidos están sujetos al ingreso masivo del total de la población y a la distribución que fue informada. En caso de sufrir modificaciones, se deberán revisar los precios acorde a la nueva población.");
+  if(validez&&validez.trim())notas.push(validez.trim());
+  if(textoExtra&&textoExtra.trim())notas.push(textoExtra.trim());
+
+  return`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<style>
+  @page{size:A4;margin:18mm 22mm;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1a1a1a;}
+  .page{width:100%;padding:0;}
+  .logo-wrap{display:flex;align-items:flex-end;padding-bottom:10px;border-bottom:3px solid #1B2A7B;margin-bottom:28px;}
+  .logo-wrap img{height:48px;}
+  .date{font-style:italic;color:#333;font-size:11pt;margin-bottom:36px;}
+  .main-title{text-align:center;color:#1B2A7B;font-size:20pt;font-weight:bold;line-height:1.3;margin-bottom:48px;}
+  .section-bar{background:#404040;color:#fff;font-weight:bold;font-size:11pt;padding:9px 16px;margin-bottom:28px;}
+  .table-wrap{display:flex;justify-content:center;margin-bottom:40px;}
+  .prop-table{border-collapse:collapse;min-width:340px;}
+  .prop-table-full{min-width:580px;}
+  .th-plan{background:#1B2A7B;color:#fff;padding:8px 14px;text-align:center;font-size:10pt;border:1px solid #1B2A7B;min-width:130px;}
+  .th-data{background:#1B2A7B;color:#fff;padding:8px 20px;text-align:center;font-size:10pt;border:1px solid #1B2A7B;min-width:110px;}
+  .th-group{background:#1B2A7B;color:#fff;padding:7px 10px;text-align:center;font-size:9.5pt;border:1px solid #1B2A7B;}
+  .th-group-alt{background:#2a4a9b;color:#fff;padding:7px 10px;text-align:center;font-size:9.5pt;border:1px solid #1B2A7B;}
+  .th-data-sm{background:#1B2A7B;color:#fff;padding:7px 8px;text-align:center;font-size:9pt;border:1px solid #1B2A7B;min-width:78px;}
+  .th-alt{background:#2a4a9b!important;}
+  .td-plan{padding:8px 14px;font-weight:bold;font-size:10pt;border:1px solid #ddd;text-align:left;color:#1a1a1a;}
+  .td-data{padding:8px 20px;text-align:center;border:1px solid #ddd;font-size:10pt;background:#fff;}
+  .td-data-sm{padding:7px 8px;text-align:center;border:1px solid #ddd;font-size:9.5pt;background:#fff;}
+  .td-alt{background:#f8f9ff!important;}
+  .notes{margin-top:32px;}
+  .notes-title{color:#1B2A7B;font-size:12pt;font-weight:normal;margin-bottom:12px;}
+  .notes ul{list-style:disc;padding-left:28px;}
+  .notes li{margin:6px 0;font-size:10pt;line-height:1.5;}
+  .page-num{position:fixed;bottom:10mm;right:22mm;font-size:9pt;color:#888;}
+  @media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact;}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="logo-wrap"><img src="${OMINT_LOGO}" alt="Omint"/></div>
+  <div class="date">${fechaLarga(fecha)}</div>
+  <div class="main-title">Propuesta Económica &ndash;<br>${empresa||"—"}</div>
+  <div class="section-bar">Precios cotizados</div>
+  <div class="table-wrap">${tableHTML}</div>
+  <div class="notes">
+    <p class="notes-title">Notas y aclaraciones</p>
+    <ul>${notas.map(n=>`<li>${n}</li>`).join("")}</ul>
+  </div>
+</div>
+<div class="page-num">1</div>
+</body>
+</html>`;
+}
+
+// ── EXCEL ANÁLISIS ────────────────────────────────────────────────────────────
+function exportAnalisisXLS(results,empresa,emps,costos){
+  const wb=XLSX.utils.book_new(),today=new Date().toLocaleDateString("es-AR");
+  const tf=results.reduce((a,r)=>a+r.bd.totalFac,0),tc=results.reduce((a,r)=>a+r.bd.totalCosto,0),cfg=tf>0?tc/tf*100:0;
+  // Portada
+  const ws1=XLSX.utils.aoa_to_sheet([
+    ["GRUPO OMINT — ANÁLISIS DE COTIZACIÓN"],[""],
+    ["Empresa:",empresa||"—"],["Fecha:",today],["Socios:",emps?.length||0],[""],
+    ["Facturación total:","$"+fmt(tf)],["Costo total:","$"+fmt(tc)],["C/F global:",cfg.toFixed(1)+"%"],["Calificación:",cfLabel(cfg)],
+  ]);
+  ws1["!cols"]=[{wch:28},{wch:22}];XLSX.utils.book_append_sheet(wb,ws1,"Portada");
+  // Distribución y cotización por plan
+  const rDist=[["Plan","Zona","Socios","0-25","26-35","36-54","55-59","60+","H1","H2+","Facturación","Costo","C/F","Calificación"]];
+  results.forEach(r=>{
+    const row=r.bd.rows;
+    rDist.push([r.planId,r.zona,r.bd.totalSocios,...CAT_IDS.map(id=>row.find(x=>x.id===id)?.count||0),+r.bd.totalFac.toFixed(2),+r.bd.totalCosto.toFixed(2),+r.bd.cfTotal.toFixed(1)+"%",cfLabel(r.bd.cfTotal)]);
+  });
+  rDist.push([],[`TOTAL`,"",emps?.length||0,...CAT_IDS.map(()=>""),+tf.toFixed(2),+tc.toFixed(2),+cfg.toFixed(1)+"%",cfLabel(cfg)]);
+  const ws2=XLSX.utils.aoa_to_sheet(rDist);
+  XLSX.utils.book_append_sheet(wb,ws2,"Cotización");
+  // Desglose por plan (precios + costos + C/F)
+  results.forEach(r=>{
+    const rp=[["Zona:",r.zona],["Plan:",r.planId],["Socios:",r.bd.totalSocios],[""],
+      ["Categoría","N°","Precio","Costo","Facturación","Costo Total","C/F"]];
+    r.bd.rows.forEach(row=>rp.push([row.label,row.count,+row.precio.toFixed(2),+row.costo.toFixed(2),+row.fac.toFixed(2),+row.cos.toFixed(2),row.fac>0?+(row.cf.toFixed(1)):"-"]));
+    rp.push([],["TOTAL",r.bd.totalSocios,"","",+r.bd.totalFac.toFixed(2),+r.bd.totalCosto.toFixed(2),+r.bd.cfTotal.toFixed(1)+"%"]);
+    const ws=XLSX.utils.aoa_to_sheet(rp);
+    XLSX.utils.book_append_sheet(wb,ws,`${r.zona}_${r.planId}`.replace(/[^a-zA-Z0-9_]/g,"_").substring(0,31));
+  });
+  if(emps?.length>0)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(emps),"Nómina");
+  XLSX.writeFile(wb,`Analisis_${empresa||"empresa"}_${today.replace(/\//g,"-")}.xlsx`);
+}
+
+// ── ESTILOS ───────────────────────────────────────────────────────────────────
 const card=(x={})=>({background:"#fff",border:`1px solid ${BORDER}`,borderRadius:12,padding:"1.5rem",...x});
 const TH=(x={})=>({padding:"8px 11px",fontWeight:600,fontSize:10.5,color:"#6B7280",borderBottom:`1px solid ${BORDER}`,textAlign:"right",background:GRAY,letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:FONT,whiteSpace:"nowrap",...x});
 const TD=(x={})=>({padding:"8px 11px",borderBottom:`1px solid ${BORDER}`,fontSize:13,fontFamily:FONT,...x});
@@ -139,7 +334,6 @@ const btnS={background:"#fff",color:BLUE,border:`1px solid ${BORDER}`,borderRadi
 const inp={border:`1px solid ${BORDER}`,borderRadius:8,padding:"8px 12px",fontSize:13,width:"100%",outline:"none",fontFamily:FONT};
 const numInp=(w=90,adj=false)=>({width:w,textAlign:"right",fontSize:12,padding:"3px 6px",border:`1px solid ${adj?BLUE:BORDER}`,borderRadius:6,fontFamily:FONT,color:adj?BLUE:"#111827"});
 
-// ─── TEMPLATE DOWNLOAD ───────────────────────────────────────────────────────
 function downloadTemplate(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([
@@ -154,203 +348,187 @@ function downloadTemplate(){
   XLSX.writeFile(wb,"template_nomina_omint.xlsx");
 }
 
-// ─── EXPORT ──────────────────────────────────────────────────────────────────
-function exportXLS(groups,empresa,emps){
-  const wb=XLSX.utils.book_new(),today=new Date().toLocaleDateString("es-AR");
-  const tf=groups.reduce((a,g)=>a+g.bd.totalFac,0),tc=groups.reduce((a,g)=>a+g.bd.totalCosto,0),cfg=tf>0?tc/tf*100:0;
-  const ws1=XLSX.utils.aoa_to_sheet([
-    ["GRUPO OMINT"],[""],["COTIZACIÓN CORPORATIVA"],[""],
-    ["Empresa:",empresa||"—"],["Fecha:",today],["Socios:",emps.length],[""],
-    ["Facturación total:","$"+fmt(tf)],["Costo total:","$"+fmt(tc)],["C/F global:",cfg.toFixed(1)+"%"],["Calificación:",cfLabel(cfg)],
-  ]);
-  ws1["!cols"]=[{wch:28},{wch:22}];XLSX.utils.book_append_sheet(wb,ws1,"Portada");
-  const rsum=[["Zona","Plan","Banda","Socios","Facturación","Costo","C/F","Calificación"]];
-  groups.forEach(g=>rsum.push([g.zona,g.planId,BANDA_LABELS[g.banda]||g.banda,g.bd.totalSocios,+g.bd.totalFac.toFixed(2),+g.bd.totalCosto.toFixed(2),+g.bd.cfTotal.toFixed(1)+"%",cfLabel(g.bd.cfTotal)]));
-  rsum.push([],[`TOTAL`,"","",emps.length,+tf.toFixed(2),+tc.toFixed(2),+cfg.toFixed(1)+"%",cfLabel(cfg)]);
-  const ws2=XLSX.utils.aoa_to_sheet(rsum);ws2["!cols"]=[{wch:12},{wch:12},{wch:18},{wch:8},{wch:14},{wch:12},{wch:8},{wch:12}];
-  XLSX.utils.book_append_sheet(wb,ws2,"Resumen");
-  groups.forEach(g=>{
-    const r=[["Zona:",g.zona],["Plan:",g.planId],["Banda:",BANDA_LABELS[g.banda]||g.banda],["Socios:",g.bd.totalSocios],[""],
-      ["Categoría","N°","Precio","Costo","Facturación","Costo Total","C/F"]];
-    g.bd.rows.forEach(row=>r.push([row.label,row.count,+row.precio.toFixed(2),+row.costo.toFixed(2),+row.fac.toFixed(2),+row.cos.toFixed(2),row.fac>0?+(row.cf.toFixed(1)):"-"]));
-    r.push([],["TOTAL",g.bd.totalSocios,"","",+g.bd.totalFac.toFixed(2),+g.bd.totalCosto.toFixed(2),+g.bd.cfTotal.toFixed(1)+"%"]);
-    const ws=XLSX.utils.aoa_to_sheet(r);
-    XLSX.utils.book_append_sheet(wb,ws,`${g.zona}_${g.planId}`.replace(/[^a-zA-Z0-9_]/g,"_").substring(0,31));
+// ── MODAL EXPORTAR ────────────────────────────────────────────────────────────
+function ExportModal({results,empresa,onClose}){
+  const [cfg,setCfg]=useState({
+    empresa:empresa||"",
+    fecha:new Date().toISOString().split("T")[0],
+    validez:"La propuesta tiene validez por 30 días.",
+    formato:"completo",
+    planesNombres:Object.fromEntries(results.map(r=>[r.adjKey,r.planId])),
+    textoExtra:"",
   });
-  if(emps?.length>0)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(emps),"Nómina");
-  XLSX.writeFile(wb,`Cotizacion_${empresa||"empresa"}_${today.replace(/\//g,"-")}.xlsx`);
-}
+  function upd(k,v){setCfg(p=>({...p,[k]:v}));}
 
-// ─── IMPORTAR ────────────────────────────────────────────────────────────────
-function Importar({onPreciosImport,onCostosImport}){
-  const [precStatus,setPrecStatus]=useState(null); // null | loading | ok | error
-  const [cosStatus,setCosStatus]=useState(null);
-  const [precMsg,setPrecMsg]=useState("");
-  const [cosMsg,setCosMsg]=useState("");
-
-  async function handlePrecios(e){
-    const f=e.target.files[0];if(!f)return;
-    setPrecStatus("loading");setPrecMsg("");
-    try{
-      const data=await parsePreciosFile(f);
-      const zonas=Object.keys(data);
-      const planCount=new Set(zonas.flatMap(z=>Object.keys(data[z]))).size;
-      onPreciosImport(data);
-      setPrecStatus("ok");setPrecMsg(`${zonas.length} zonas · ${planCount} planes importados`);
-    }catch(err){setPrecStatus("error");setPrecMsg(err.message);}
+  function exportPDF(){
+    const html=generateProposalHTML(cfg,results);
+    const w=window.open("","_blank");
+    w.document.write(html);w.document.close();
+    setTimeout(()=>w.print(),400);
   }
 
-  async function handleCostos(e){
-    const f=e.target.files[0];if(!f)return;
-    setCosStatus("loading");setCosMsg("");
-    try{
-      const data=await parseCostosFile(f);
-      const planCount=Object.keys(data).length;
-      onCostosImport(data);
-      setCosStatus("ok");setCosMsg(`${planCount} planes importados`);
-    }catch(err){setCosStatus("error");setCosMsg(err.message);}
-  }
-
-  const StatusBadge=({s,msg})=>s==="ok"?<span style={{fontSize:12,color:"#16A34A",fontFamily:FONT}}>✓ {msg}</span>:s==="error"?<span style={{fontSize:12,color:"#DC2626",fontFamily:FONT}}>✗ {msg}</span>:s==="loading"?<span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>Procesando…</span>:null;
+  const overlay={position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"};
+  const modal={background:"#fff",borderRadius:16,padding:"2rem",width:"min(640px,95vw)",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"};
 
   return(
-    <div>
-      <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Importar datos</h2>
-      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Subí los archivos mensuales para actualizar precios y costos automáticamente.</p>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-        {[{title:"Lista de Precios (.xls)",desc:"Lista_de_precios_Empresas_Unificada_-_Planes_201602_-_Abril_2026.xls",onChange:handlePrecios,status:precStatus,msg:precMsg,note:"Sheets 1=AMBA · 2=Córdoba · 7=Mendoza"},
-          {title:"Rentabilidad / Costos (.xlsx)",desc:"Rentabilidad_objetivo_EE__Precios_a_la_venta_0326_.xlsx",onChange:handleCostos,status:cosStatus,msg:cosMsg,note:'Sheet "Costos Cerrado+Abierto"'}].map(item=>(
-          <div key={item.title} style={card()}>
-            <p style={{fontSize:14,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>{item.title}</p>
-            <p style={{fontSize:11,color:"#9CA3AF",marginBottom:"1rem",fontFamily:FONT}}>{item.note}</p>
-            <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",border:`2px dashed ${BLUE}`,borderRadius:8,cursor:"pointer",background:BLUE_LT}}>
-              <span style={{fontSize:20}}>📂</span>
-              <span style={{fontSize:13,color:BLUE,fontWeight:500,fontFamily:FONT}}>Subir archivo</span>
-              <input type="file" accept=".xls,.xlsx" onChange={item.onChange} style={{display:"none"}}/>
-            </label>
-            <div style={{marginTop:10}}><StatusBadge s={item.status} msg={item.msg}/></div>
+    <div style={overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={modal}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.5rem"}}>
+          <h3 style={{fontSize:17,fontWeight:700,color:BLUE,fontFamily:FONT}}>Exportar propuesta</h3>
+          <button onClick={onClose} style={{border:"none",background:"none",fontSize:20,cursor:"pointer",color:"#6B7280"}}>✕</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:"1.25rem"}}>
+          {[{k:"empresa",l:"Empresa",t:"text"},{k:"fecha",l:"Fecha de la propuesta",t:"date"},{k:"validez",l:"Texto de validez",t:"text"}].map(f=>(
+            <div key={f.k}>
+              <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>{f.l}</label>
+              <input type={f.t} value={cfg[f.k]} onChange={e=>upd(f.k,e.target.value)} style={inp}/>
+            </div>
+          ))}
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Formato de precios</label>
+            <div style={{display:"flex",gap:10}}>
+              {[{v:"completo",l:"Completo (7 categorías)"},{v:"ponderado",l:"Ponderado (0-59 y 60+)"}].map(o=>(
+                <button key={o.v} onClick={()=>upd("formato",o.v)} style={{...cfg.formato===o.v?btnP:btnS,flex:1,textAlign:"center"}}>{o.l}</button>
+              ))}
+            </div>
+            {cfg.formato==="ponderado"&&<p style={{fontSize:11,color:"#6B7280",marginTop:6,fontFamily:FONT}}>El precio "0 a 59" se calcula como promedio ponderado según la distribución de la nómina.</p>}
           </div>
-        ))}
-      </div>
-      <div style={{...card(),marginTop:"1.5rem",background:BLUE_LT,border:`1px solid ${BLUE}22`}}>
-        <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>¿Cómo funciona la importación?</p>
-        <p style={{fontSize:12,color:"#374151",lineHeight:1.6,fontFamily:FONT}}>
-          Los precios se extraen por zona (AMBA, Córdoba, Mendoza) y por banda de cápitas (1-10, 11-99, 100-199, 200-499). Los costos son iguales para todas las zonas. Después de importar podés editar cualquier valor manualmente en las secciones Precios y Costos del menú.
-        </p>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Nombre de planes (en la propuesta)</label>
+            {results.map(r=>(
+              <div key={r.adjKey} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                <span style={{...badge(ZONA_COLORS[r.zona]?.c||BLUE,ZONA_COLORS[r.zona]?.bg||BLUE_LT),fontSize:11,minWidth:64}}>{r.zona}</span>
+                <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT,minWidth:90}}>{r.planId}</span>
+                <span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>→</span>
+                <input value={cfg.planesNombres[r.adjKey]||r.planId} onChange={e=>setCfg(p=>({...p,planesNombres:{...p.planesNombres,[r.adjKey]:e.target.value}}))} style={{...inp,flex:1,padding:"6px 10px",fontSize:13}}/>
+              </div>
+            ))}
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Texto adicional (opcional)</label>
+            <textarea value={cfg.textoExtra} onChange={e=>upd("textoExtra",e.target.value)} rows={3} placeholder="Se agrega como bullet adicional en notas..." style={{...inp,resize:"vertical",lineHeight:1.5}}/>
+          </div>
+          <div style={{display:"flex",gap:10,marginTop:"0.5rem"}}>
+            <button onClick={exportPDF} style={{...btnP,flex:1}}>📄 Exportar PDF</button>
+            <button onClick={()=>{exportAnalisisXLS(results,cfg.empresa,null,{});onClose();}} style={{...btnS,flex:1}}>📊 Exportar Excel análisis</button>
+          </div>
+          <p style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT,textAlign:"center"}}>El PDF se abre en una nueva pestaña → usá Ctrl+P o Cmd+P para guardar como PDF</p>
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── PRECIOS VIGENTES ────────────────────────────────────────────────────────
+// ── IMPORTAR ──────────────────────────────────────────────────────────────────
+function Importar({onPreciosImport,onCostosImport}){
+  const [pS,setPS]=useState(null);const[pM,setPM]=useState("");
+  const [cS,setCS]=useState(null);const[cM,setCM]=useState("");
+  async function handleP(e){const f=e.target.files[0];if(!f)return;setPS("loading");try{const d=await parsePreciosFile(f);onPreciosImport(d);const planes=new Set(Object.values(d).flatMap(z=>Object.keys(z)));setPS("ok");setPM(`${Object.keys(d).length} zonas · ${planes.size} planes · banda 200-499 importada`);}catch(err){setPS("error");setPM(err.message);}}
+  async function handleC(e){const f=e.target.files[0];if(!f)return;setCS("loading");try{const d=await parseCostosFile(f);onCostosImport(d);setCS("ok");setCM(`${Object.keys(d).length} planes importados`);}catch(err){setCS("error");setCM(err.message);}}
+  const S=({s,m})=>!s?null:s==="ok"?<span style={{fontSize:12,color:"#16A34A",fontFamily:FONT}}>✓ {m}</span>:s==="error"?<span style={{fontSize:12,color:"#DC2626",fontFamily:FONT}}>✗ {m}</span>:<span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>Procesando…</span>;
+  return(<div>
+    <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Importar datos</h2>
+    <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Subí los archivos mensuales para actualizar precios y costos automáticamente.</p>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      {[{t:"Lista de Precios (.xls)",n:"Lista_de_precios_Empresas_Unificada_...",onChange:handleP,s:pS,m:pM,note:"Sheets 1=AMBA · 2=Córdoba · 7=Mendoza · Extrae banda 200-499"},
+        {t:"Rentabilidad / Costos (.xlsx)",n:"Rentabilidad_objetivo_EE_...",onChange:handleC,s:cS,m:cM,note:'Sheet "Costos Cerrado+Abierto"'}].map(item=>(
+        <div key={item.t} style={card()}>
+          <p style={{fontSize:14,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>{item.t}</p>
+          <p style={{fontSize:11,color:"#9CA3AF",marginBottom:"1rem",fontFamily:FONT}}>{item.note}</p>
+          <label style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",border:`2px dashed ${BLUE}`,borderRadius:8,cursor:"pointer",background:BLUE_LT}}>
+            <span style={{fontSize:20}}>📂</span><span style={{fontSize:13,color:BLUE,fontWeight:500,fontFamily:FONT}}>Subir archivo</span>
+            <input type="file" accept=".xls,.xlsx" onChange={item.onChange} style={{display:"none"}}/>
+          </label>
+          <div style={{marginTop:10}}><S s={item.s} m={item.m}/></div>
+        </div>
+      ))}
+    </div>
+    <div style={{...card(),marginTop:"1.5rem",background:BLUE_LT,border:`1px solid ${BLUE}22`}}>
+      <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Flujo mensual de actualización</p>
+      <p style={{fontSize:12,color:"#374151",lineHeight:1.7,fontFamily:FONT}}>1. Importá el nuevo XLS de precios → 2. Importá el XLSX de costos → 3. Los valores se guardan automáticamente y se usan en todas las cotizaciones nuevas. Los ajustes manuales que hayas hecho en "Precios Vigentes" o "Costos Vigentes" se reemplazan al reimportar.</p>
+    </div>
+  </div>);
+}
+
+// ── PRECIOS VIGENTES ──────────────────────────────────────────────────────────
 function PreciosVigentes({precios,onSave}){
   const allPlans=[...new Set(ZONA_IDS.flatMap(z=>Object.keys(precios?.[z]||{})))].sort();
   const [zona,setZona]=useState(ZONA_IDS[0]);
   const [plan,setPlan]=useState(null);
-  const [banda,setBanda]=useState(BANDA_IDS[1]);
-  const [loc,setLoc]=useState({});
-  const [ok,setOk]=useState(false);
-
-  const planList=[...new Set(Object.keys(precios?.[zona]||{}))].sort();
-  const selPlan=plan||(planList[0]||null);
-  useEffect(()=>{if(!planList.includes(selPlan)&&planList.length>0)setPlan(planList[0]);},[zona]);
-
-  const curData=precios?.[zona]?.[selPlan]?.[banda]||{};
-  useEffect(()=>{setLoc({...EMPTY_CATS,...curData});},[zona,selPlan,banda,precios]);
-
-  function save(){
-    const nxt=JSON.parse(JSON.stringify(precios||{}));
-    if(!nxt[zona])nxt[zona]={};if(!nxt[zona][selPlan])nxt[zona][selPlan]={};
-    nxt[zona][selPlan][banda]={...loc};
-    onSave(nxt);setOk(true);setTimeout(()=>setOk(false),2500);
-  }
-
+  const [loc,setLoc]=useState({});const[ok,setOk]=useState(false);
+  const planList=Object.keys(precios?.[zona]||{}).sort();
+  const selPlan=planList.includes(plan)?plan:(planList[0]||null);
+  useEffect(()=>{if(selPlan)setLoc({...EMPTY_CATS,...(precios?.[zona]?.[selPlan]||{})});},[zona,selPlan,precios]);
+  function save(){const nxt=JSON.parse(JSON.stringify(precios||{}));if(!nxt[zona])nxt[zona]={};nxt[zona][selPlan]={...loc};onSave(nxt);setOk(true);setTimeout(()=>setOk(false),2500);}
   const zc=ZONA_COLORS[zona]||{c:BLUE,bg:BLUE_LT};
-
-  return(
-    <div>
-      <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Precios Vigentes</h2>
-      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Precios por zona, plan y banda de cápitas. Podés importarlos o editarlos manualmente.</p>
-      {allPlans.length===0&&<div style={{...card(),padding:"2rem",textAlign:"center",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay precios cargados. Importá el archivo de lista de precios.</p></div>}
-      {allPlans.length>0&&<>
-        <div style={{display:"flex",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
-          {ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z];return(<button key={z} onClick={()=>setZona(z)} style={{padding:"7px 16px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:zona===z?700:400,background:zona===z?zc2.c:"#fff",color:zona===z?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>{z}</button>);}) }
+  return(<div>
+    <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Precios Vigentes</h2>
+    <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Precios por zona y plan (banda 200-499 cápitas). Podés importarlos o editarlos manualmente.</p>
+    {allPlans.length===0&&<div style={{...card(),padding:"2rem",textAlign:"center",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay precios cargados. Importá el archivo de lista de precios.</p></div>}
+    {allPlans.length>0&&<>
+      <div style={{display:"flex",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
+        {ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z];return(<button key={z} onClick={()=>setZona(z)} style={{padding:"7px 16px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:zona===z?700:400,background:zona===z?zc2.c:"#fff",color:zona===z?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>{z}</button>);})}
+      </div>
+      <div style={{display:"flex",gap:6,marginBottom:"1.25rem",flexWrap:"wrap"}}>
+        {planList.map(p=><button key={p} onClick={()=>setPlan(p)} style={{...selPlan===p?{...btnP,background:zc.c,padding:"6px 12px",fontSize:12}:{...btnS,padding:"6px 12px",fontSize:12}}}>{p}</button>)}
+      </div>
+      {selPlan&&<div style={card()}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem"}}>
+          <span style={{...badge(zc.c,zc.bg),fontSize:11}}>{zona}</span>
+          <span style={{...badge("#fff",BLUE),fontSize:11}}>{selPlan}</span>
+          <span style={{...badge("#374151","#F3F4F6"),fontSize:11}}>200-499 cápitas</span>
         </div>
-        <div style={{display:"flex",gap:6,marginBottom:"0.75rem",flexWrap:"wrap"}}>
-          {planList.map(p=><button key={p} onClick={()=>setPlan(p)} style={{...selPlan===p?{...btnP,background:zc.c,padding:"6px 12px",fontSize:12}:{...btnS,padding:"6px 12px",fontSize:12}}}>{p}</button>)}
+        <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",maxWidth:460}}>
+          <thead><tr><th style={TH({textAlign:"left"})}>Categoría</th><th style={TH()}>Precio ($)</th></tr></thead>
+          <tbody>{CATS.map(c=><tr key={c.id}><td style={TD({fontWeight:500})}>{c.label}</td>
+            <td style={TD({textAlign:"right"})}><input type="number" min={0} value={loc[c.id]||0} onChange={e=>setLoc(p=>({...p,[c.id]:parseFloat(e.target.value)||0}))} style={{...inp,width:180,textAlign:"right"}}/></td></tr>)}
+          </tbody>
+        </table>
+        <div style={{marginTop:"1.25rem",display:"flex",gap:12,alignItems:"center"}}>
+          <button onClick={save} style={{...btnP,background:zc.c}}>{ok?"✓ Guardado":"Guardar"}</button>
+          {ok&&<span style={{fontSize:13,color:"#16a34a",fontFamily:FONT}}>Guardado correctamente</span>}
         </div>
-        <div style={{display:"flex",gap:6,marginBottom:"1.25rem",flexWrap:"wrap"}}>
-          {BANDA_IDS.map(b=><button key={b} onClick={()=>setBanda(b)} style={{...banda===b?{...btnP,background:"#374151",padding:"5px 12px",fontSize:11}:{...btnS,padding:"5px 12px",fontSize:11}}}>{BANDA_LABELS[b]}</button>)}
-        </div>
-        {selPlan&&<div style={card()}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"1rem"}}>
-            <span style={{...badge(zc.c,zc.bg),fontSize:11}}>{zona}</span>
-            <span style={{...badge("#fff",BLUE),fontSize:11}}>{selPlan}</span>
-            <span style={{...badge("#374151","#F3F4F6"),fontSize:11}}>{BANDA_LABELS[banda]}</span>
-          </div>
-          <div style={{overflowX:"auto"}}>
-            <table style={{borderCollapse:"collapse",fontSize:13,minWidth:500,width:"100%"}}>
-              <thead><tr><th style={TH({textAlign:"left"})}>Categoría</th><th style={TH()}>Precio ($)</th></tr></thead>
-              <tbody>{CATS.map(c=><tr key={c.id}><td style={TD({fontWeight:500})}>{c.label}</td>
-                <td style={TD({textAlign:"right"})}><input type="number" min={0} value={loc[c.id]||0} onChange={e=>setLoc(p=>({...p,[c.id]:parseFloat(e.target.value)||0}))} style={{...inp,width:180,textAlign:"right"}}/></td></tr>)}</tbody>
-            </table>
-          </div>
-          <div style={{marginTop:"1.25rem",display:"flex",gap:12,alignItems:"center"}}>
-            <button onClick={save} style={{...btnP,background:zc.c}}>{ok?"✓ Guardado":"Guardar"}</button>
-            {ok&&<span style={{fontSize:13,color:"#16a34a",fontFamily:FONT}}>Guardado correctamente</span>}
-          </div>
-        </div>}
-      </>}
-    </div>
-  );
+      </div>}
+    </>}
+  </div>);
 }
 
-// ─── COSTOS VIGENTES ─────────────────────────────────────────────────────────
+// ── COSTOS VIGENTES ───────────────────────────────────────────────────────────
 function CostosVigentes({costos,onSave}){
   const plans=Object.keys(costos||{}).sort();
   const [plan,setPlan]=useState(plans[0]||null);
-  const [loc,setLoc]=useState({});
-  const [ok,setOk]=useState(false);
-  const selPlan=plan||(plans[0]||null);
+  const [loc,setLoc]=useState({});const[ok,setOk]=useState(false);
+  const selPlan=plans.includes(plan)?plan:(plans[0]||null);
   useEffect(()=>{setLoc({...EMPTY_CATS,...(costos?.[selPlan]||{})});},[selPlan,costos]);
-
-  function save(){
-    const nxt={...costos,[selPlan]:{...loc}};
-    onSave(nxt);setOk(true);setTimeout(()=>setOk(false),2500);
-  }
-
-  return(
-    <div>
-      <h2 style={{fontSize:22,fontWeight:700,color:"#7C3AED",marginBottom:4,fontFamily:FONT}}>Costos Vigentes</h2>
-      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Costos combinados (Cerrado+Abierto) por plan. Iguales para todas las zonas.</p>
-      {plans.length===0&&<div style={{...card(),padding:"2rem",textAlign:"center",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay costos cargados. Importá el archivo de rentabilidad.</p></div>}
-      {plans.length>0&&<>
-        <div style={{display:"flex",gap:6,marginBottom:"1.25rem",flexWrap:"wrap"}}>
-          {plans.map(p=><button key={p} onClick={()=>setPlan(p)} style={{...selPlan===p?{...btnP,background:"#7C3AED",padding:"6px 12px",fontSize:12}:{...btnS,padding:"6px 12px",fontSize:12}}}>{p}</button>)}
+  function save(){const nxt={...costos,[selPlan]:{...loc}};onSave(nxt);setOk(true);setTimeout(()=>setOk(false),2500);}
+  return(<div>
+    <h2 style={{fontSize:22,fontWeight:700,color:"#7C3AED",marginBottom:4,fontFamily:FONT}}>Costos Vigentes</h2>
+    <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Costos (Cerrado+Abierto) por plan, iguales para todas las zonas.</p>
+    {plans.length===0&&<div style={{...card(),padding:"2rem",textAlign:"center",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay costos cargados. Importá el archivo de rentabilidad.</p></div>}
+    {plans.length>0&&<>
+      <div style={{display:"flex",gap:6,marginBottom:"1.25rem",flexWrap:"wrap"}}>
+        {plans.map(p=><button key={p} onClick={()=>setPlan(p)} style={{...selPlan===p?{...btnP,background:"#7C3AED",padding:"6px 12px",fontSize:12}:{...btnS,padding:"6px 12px",fontSize:12}}}>{p}</button>)}
+      </div>
+      {selPlan&&<div style={card()}>
+        <table style={{borderCollapse:"collapse",fontSize:13,width:"100%",maxWidth:460}}>
+          <thead><tr><th style={TH({textAlign:"left"})}>Categoría</th><th style={TH({color:"#7C3AED"})}>Costo C+A ($)</th></tr></thead>
+          <tbody>{CATS.map(c=><tr key={c.id}><td style={TD({fontWeight:500})}>{c.label}</td>
+            <td style={TD({textAlign:"right"})}><input type="number" min={0} value={loc[c.id]||0} onChange={e=>setLoc(p=>({...p,[c.id]:parseFloat(e.target.value)||0}))} style={{...inp,width:180,textAlign:"right"}}/></td></tr>)}
+          </tbody>
+        </table>
+        <div style={{marginTop:"1.25rem",display:"flex",gap:12,alignItems:"center"}}>
+          <button onClick={save} style={{...btnP,background:"#7C3AED"}}>{ok?"✓ Guardado":"Guardar"}</button>
+          {ok&&<span style={{fontSize:13,color:"#16a34a",fontFamily:FONT}}>Guardado correctamente</span>}
         </div>
-        {selPlan&&<div style={card()}>
-          <div style={{overflowX:"auto"}}>
-            <table style={{borderCollapse:"collapse",fontSize:13,minWidth:500,width:"100%"}}>
-              <thead><tr><th style={TH({textAlign:"left"})}>Categoría</th><th style={TH({color:"#7C3AED"})}>Costo C+A ($)</th></tr></thead>
-              <tbody>{CATS.map(c=><tr key={c.id}><td style={TD({fontWeight:500})}>{c.label}</td>
-                <td style={TD({textAlign:"right"})}><input type="number" min={0} value={loc[c.id]||0} onChange={e=>setLoc(p=>({...p,[c.id]:parseFloat(e.target.value)||0}))} style={{...inp,width:180,textAlign:"right"}}/></td></tr>)}</tbody>
-            </table>
-          </div>
-          <div style={{marginTop:"1.25rem",display:"flex",gap:12,alignItems:"center"}}>
-            <button onClick={save} style={{...btnP,background:"#7C3AED"}}>{ok?"✓ Guardado":"Guardar"}</button>
-            {ok&&<span style={{fontSize:13,color:"#16a34a",fontFamily:FONT}}>Guardado correctamente</span>}
-          </div>
-        </div>}
-      </>}
-    </div>
-  );
+      </div>}
+    </>}
+  </div>);
 }
 
-// ─── HISTORIAL ───────────────────────────────────────────────────────────────
+// ── HISTORIAL ─────────────────────────────────────────────────────────────────
 function Historial({quotes,onUpdate}){
   const [open,setOpen]=useState({});
-  const groups={};
-  quotes.forEach(q=>{const k=(q.empresa||"Sin nombre").trim();if(!groups[k])groups[k]=[];groups[k].push(q);});
+  const groups={};quotes.forEach(q=>{const k=(q.empresa||"Sin nombre").trim();if(!groups[k])groups[k]=[];groups[k].push(q);});
   Object.values(groups).forEach(g=>g.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)));
   const empresas=Object.keys(groups).sort();
   if(!empresas.length)return(<div><h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:"1.25rem",fontFamily:FONT}}>Historial</h2><div style={{...card(),textAlign:"center",padding:"3rem",color:"#9CA3AF"}}><div style={{fontSize:40,marginBottom:12}}>📁</div><p style={{fontFamily:FONT}}>No hay cotizaciones todavía.</p></div></div>);
@@ -385,7 +563,7 @@ function Historial({quotes,onUpdate}){
   </div>);
 }
 
-// ─── CONFIGURACIÓN ───────────────────────────────────────────────────────────
+// ── CONFIGURACIÓN ─────────────────────────────────────────────────────────────
 function Configuracion({apiKey,onSave}){
   const [k,setK]=useState(apiKey||"");const[ok,setOk]=useState(false);
   return(<div>
@@ -399,7 +577,7 @@ function Configuracion({apiKey,onSave}){
   </div>);
 }
 
-// ─── COTIZADOR ───────────────────────────────────────────────────────────────
+// ── COTIZADOR ─────────────────────────────────────────────────────────────────
 function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
@@ -407,11 +585,11 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
   const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});
   const [globalZona,setGlobalZona]=useState("AMBA");
   const [planMapping,setPlanMapping]=useState({});
-  const [bandaOverrides,setBandaOverrides]=useState({}); // {adjKey: banda}
-  const [adjPrices,setAdjPrices]=useState({});  // {adjKey: {catId: price}}
-  const [adjCostos,setAdjCostos]=useState({});  // {adjKey: {catId: costo}}
+  const [adjPrices,setAdjPrices]=useState({});
+  const [adjCostos,setAdjCostos]=useState({});
   const [empresa,setEmpresa]=useState("");
   const [showSug,setShowSug]=useState(false);
+  const [showExport,setShowExport]=useState(false);
   const [chat,setChat]=useState([]);
   const [chatIn,setChatIn]=useState("");
   const [chatLoading,setCL]=useState(false);
@@ -437,30 +615,26 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
     if(!emps||!map.titAge||!map.ku)return[];
     const gmap={};
     emps.forEach(e=>{
-      const zona=getEmpZona(e),planId=getEmpPlan(e);
-      if(!planId)return;
+      const zona=getEmpZona(e),planId=getEmpPlan(e);if(!planId)return;
       const key=`${zona}||${planId}`;
       if(!gmap[key])gmap[key]={zona,planId,empList:[]};
       gmap[key].empList.push(e);
     });
-    return Object.values(gmap).sort((a,b)=>a.zona.localeCompare(b.zona)||a.planId.localeCompare(b.planId));
+    return Object.values(gmap).sort((a,b)=>a.zona.localeCompare(b.zona)||planTier(a.planId)-planTier(b.planId));
   }
 
   function buildResults(){
     return buildGroups().map(({zona,planId,empList})=>{
       const adjKey=`${zona}||${planId}`;
-      const banda=bandaOverrides[adjKey]||autoBanda(empList.length);
-      // Prices: precios[zona][planId][banda] + manual overrides
-      const basePrices=precios?.[zona]?.[planId]?.[banda]||{};
+      const basePrices=precios?.[zona]?.[planId]||{};
       const adjP=adjPrices[adjKey]||{};
-      const effectivePrices=Object.fromEntries(CAT_IDS.map(c=>[c,adjP[c]!==undefined?adjP[c]:basePrices[c]||0]));
-      // Costs: costos[planId] + manual overrides
+      const effPrices=Object.fromEntries(CAT_IDS.map(c=>[c,adjP[c]!==undefined?adjP[c]:basePrices[c]||0]));
       const baseCostos=costos?.[planId]||{};
       const adjC=adjCostos[adjKey]||{};
-      const effectiveCostos=Object.fromEntries(CAT_IDS.map(c=>[c,adjC[c]!==undefined?adjC[c]:baseCostos[c]||0]));
-      const bd=calcBD(empList,map,effectivePrices,effectiveCostos);
+      const effCostos=Object.fromEntries(CAT_IDS.map(c=>[c,adjC[c]!==undefined?adjC[c]:baseCostos[c]||0]));
+      const bd=calcBD(empList,map,effPrices,effCostos);
       const mapping=map.planCol?externalPlans.filter(p=>(planMapping[p]===planId)&&!isOmintPlan(p)).map(p=>({from:p,to:planId})):[];
-      return{zona,planId,empList,banda,bd,mapping,adjKey,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0};
+      return{zona,planId,empList,bd,mapping,adjKey,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0};
     });
   }
 
@@ -468,6 +642,7 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
   const grandFac=results.reduce((a,r)=>a+r.bd.totalFac,0);
   const grandCosto=results.reduce((a,r)=>a+r.bd.totalCosto,0);
   const grandCF=grandFac>0?grandCosto/grandFac*100:0;
+  const inversions=sub===3?checkPriceInversions(results):[];
 
   function handleFile(e){
     const f=e.target.files[0];if(!f)return;
@@ -481,11 +656,11 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
     if(!apiKey){alert("Configurá tu API key en Configuración.");return;}
     const m=chatIn.trim();setChatIn("");
     const hist=[...chat,{role:"user",content:m}];setChat(hist);setCL(true);
-    const resumen=results.map(r=>`${r.zona}/${r.planId}(${BANDA_LABELS[r.banda]||r.banda}): ${r.bd.totalSocios} socios, fac=$${fmt(r.bd.totalFac)}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join(" | ");
+    const resumen=results.map(r=>`${r.zona}/${r.planId}: ${r.bd.totalSocios} socios, fac=$${fmt(r.bd.totalFac)}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join(" | ");
     const sys=`Sos el asistente comercial de Omint. Métrica clave: C/F (Costo/Facturación), menor es mejor.
 GRUPOS: ${resumen}
 TOTAL: fac=$${fmt(grandFac)}, C/F=${grandCF.toFixed(1)}%
-Referencia: C/F ≤70% excelente, 70-82% aceptable, >82% alto.
+Referencia: ≤70% excelente, 70-82% aceptable, >82% alto.
 Al ajustar precios indicá ZONA y PLAN + JSON:
 ZONA: AMBA
 PLAN: 4500_PYME
@@ -500,7 +675,8 @@ PLAN: 4500_PYME
       const expl=stripJ(full.replace(/ZONA:\s*\S+/,"").replace(/PLAN:\s*\S+/,""))||full;
       if(json&&zm&&pm){
         const ak=`${zm[1].trim()}||${pm[1].trim()}`;
-        const u={};CAT_IDS.forEach(c=>{u[c]=json[c]!==undefined?parseFloat(json[c])||0:(precios?.[zm[1].trim()]?.[pm[1].trim()]?.["200-499"]?.[c]||0);});
+        const base=precios?.[zm[1].trim()]?.[pm[1].trim()]||{};
+        const u={};CAT_IDS.forEach(c=>{u[c]=json[c]!==undefined?parseFloat(json[c])||0:base[c]||0;});
         setAdjPrices(prev=>({...prev,[ak]:u}));
       }
       setChat([...hist,{role:"assistant",content:expl,upd:!!(json&&zm&&pm)}]);
@@ -518,7 +694,8 @@ PLAN: 4500_PYME
   const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo"},{n:3,l:"Cotización"}];
 
   return(<div>
-    {/* STEPPER */}
+    {showExport&&<ExportModal results={results} empresa={empresa} onClose={()=>setShowExport(false)}/>}
+
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
       {sDef.map((s,i)=>(<Fragment key={s.n}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -529,7 +706,7 @@ PLAN: 4500_PYME
       </Fragment>))}
     </div>
 
-    {/* STEP 1: NÓMINA */}
+    {/* STEP 1 */}
     {sub===1&&(<div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem"}}>
         <div><h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Cargar nómina</h3><p style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>Columnas PLAN_ACTUAL y ZONA son opcionales pero recomendadas.</p></div>
@@ -572,7 +749,7 @@ PLAN: 4500_PYME
               return(<tr key={ext}>
                 <td style={TD({fontWeight:500})}>{ext}{alreadyOmint&&<span style={{...badge(BLUE,BLUE_LT),marginLeft:8,fontSize:10}}>Omint</span>}</td>
                 <td style={TD({textAlign:"right",color:"#6B7280"})}>{count}</td>
-                <td style={TD()}>{alreadyOmint?(<span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>→ {ext}</span>):(
+                <td style={TD()}>{alreadyOmint?<span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>→ {ext}</span>:(
                   <select value={planMapping[ext]||""} onChange={e=>setPlanMapping(p=>({...p,[ext]:e.target.value}))} style={{...inp,width:180}}>
                     <option value="">No cotizar</option>
                     {allOmintPlans.map(id=><option key={id} value={id}>{id}</option>)}
@@ -591,6 +768,19 @@ PLAN: 4500_PYME
 
     {/* STEP 3: COTIZACIÓN */}
     {sub===3&&(<div>
+      {/* ALERTA INVERSIÓN DE PRECIOS */}
+      {inversions.length>0&&(
+        <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"14px 18px",marginBottom:"1.25rem"}}>
+          <p style={{fontSize:13,fontWeight:700,color:"#DC2626",marginBottom:8,fontFamily:FONT}}>⚠️ Problema de precios detectado</p>
+          <p style={{fontSize:12,color:"#991B1B",marginBottom:8,fontFamily:FONT}}>Los siguientes precios están invertidos: un plan de mayor categoría tiene precio menor que uno de categoría inferior.</p>
+          {inversions.map((v,i)=>(
+            <p key={i} style={{fontSize:12,color:"#7F1D1D",fontFamily:FONT,marginBottom:4}}>
+              • <strong>{v.zona}</strong> · {v.cat}: <strong>{v.plan1}</strong> (${fmt(v.price1)}) &gt; <strong>{v.plan2}</strong> (${fmt(v.price2)}) — el plan {v.plan2} debería ser más caro que {v.plan1}.
+            </p>
+          ))}
+        </div>
+      )}
+
       {/* Header */}
       <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:"1.25rem",flexWrap:"wrap"}}>
         <div style={{flex:"1 1 200px",minWidth:160,position:"relative"}}>
@@ -604,7 +794,7 @@ PLAN: 4500_PYME
         </div>
         <div style={{display:"flex",gap:8,paddingTop:26,flexWrap:"wrap"}}>
           {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&<button onClick={()=>{setAdjPrices({});setAdjCostos({});setChat([]);}} style={{...btnS,fontSize:12}}>↺ Resetear</button>}
-          <button onClick={()=>exportXLS(results,empresa,emps)} style={btnP}>↓ Exportar</button>
+          <button onClick={()=>setShowExport(true)} style={{...btnP,background:"#374151"}}>↓ Exportar propuesta</button>
           <button onClick={()=>guardar("abierto")} style={btnS}>Guardar abierto</button>
           <button onClick={()=>guardar("cerrado")} style={btnP}>Guardar cerrado</button>
         </div>
@@ -634,11 +824,10 @@ PLAN: 4500_PYME
       {results.length>1&&(<div style={{...card(),marginBottom:"1.5rem"}}>
         <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:"1rem",fontFamily:FONT}}>Resumen por zona y plan</p>
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:500}}>
-          <thead><tr>{["Zona","Plan","Banda","Socios","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i<3?"left":"right"})}>{h}</th>)}</tr></thead>
+          <thead><tr>{["Zona","Plan","Socios","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i<2?"left":"right"})}>{h}</th>)}</tr></thead>
           <tbody>{results.map(r=>{const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};return(<tr key={r.adjKey}>
             <td style={TD()}><span style={{...badge(zc2.c,zc2.bg),fontSize:11}}>{r.zona}</span></td>
             <td style={TD({fontWeight:600,color:BLUE})}>{r.planId}</td>
-            <td style={TD({fontSize:11,color:"#6B7280"})}>{BANDA_LABELS[r.banda]||r.banda}</td>
             <td style={TD({textAlign:"right",color:"#6B7280"})}>{r.bd.totalSocios}</td>
             <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(r.bd.totalFac)}</td>
             <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(r.bd.totalCosto)}</td>
@@ -654,27 +843,16 @@ PLAN: 4500_PYME
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
             <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
             <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planId}</span>
-            <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios</span>
+            <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios · banda 200-499</span>
             {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
-            {/* Banda selector */}
-            <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>Banda:</span>
-              {BANDA_IDS.filter(b=>{const p=precios?.[r.zona]?.[r.planId];return!p||(p[b]!==undefined);}).map(b=>(
-                <button key={b} onClick={()=>setBandaOverrides(prev=>({...prev,[r.adjKey]:b}))} style={{fontSize:10,padding:"3px 8px",borderRadius:6,cursor:"pointer",fontFamily:FONT,fontWeight:r.banda===b?700:400,background:r.banda===b?"#374151":"#fff",color:r.banda===b?"#fff":"#374151",border:`1px solid ${r.banda===b?"#374151":BORDER}`}}>{BANDA_LABELS[b]}</button>
-              ))}
-              <span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
-            </div>
+            <span style={{marginLeft:"auto",...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
           </div>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:660}}>
               <thead><tr>
-                <th style={TH({textAlign:"left"})}>Categoría</th>
-                <th style={TH()}>N°</th>
-                <th style={TH({color:BLUE})}>Precio ($)</th>
-                <th style={TH({color:"#7C3AED"})}>Costo ($)</th>
-                <th style={TH()}>Facturación</th>
-                <th style={TH({color:"#DC2626"})}>Costo Total</th>
-                <th style={TH()}>C/F</th>
+                <th style={TH({textAlign:"left"})}>Categoría</th><th style={TH()}>N°</th>
+                <th style={TH({color:BLUE})}>Precio ($)</th><th style={TH({color:"#7C3AED"})}>Costo ($)</th>
+                <th style={TH()}>Facturación</th><th style={TH({color:"#DC2626"})}>Costo Total</th><th style={TH()}>C/F</th>
               </tr></thead>
               <tbody>
                 {r.bd.rows.map(row=>{
@@ -683,12 +861,8 @@ PLAN: 4500_PYME
                   return(<tr key={row.id} style={{opacity:row.count===0?0.3:1}}>
                     <td style={TD({fontWeight:500})}>{row.label}</td>
                     <td style={TD({textAlign:"right",color:"#6B7280"})}>{row.count}</td>
-                    <td style={TD({textAlign:"right"})}>
-                      <input type="number" min={0} value={row.precio} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjPrices(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={numInp(88,hadjP)}/>
-                    </td>
-                    <td style={TD({textAlign:"right"})}>
-                      <input type="number" min={0} value={row.costo} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjCostos(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={numInp(88,hadjC)}/>
-                    </td>
+                    <td style={TD({textAlign:"right"})}><input type="number" min={0} value={row.precio} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjPrices(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={numInp(88,hadjP)}/></td>
+                    <td style={TD({textAlign:"right"})}><input type="number" min={0} value={row.costo} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjCostos(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={numInp(88,hadjC)}/></td>
                     <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(row.fac)}</td>
                     <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(row.cos)}</td>
                     <td style={TD({textAlign:"right"})}>{row.fac>0&&<span style={{...badge(cfColor(row.cf),cfBg(row.cf)),minWidth:44,display:"inline-block",textAlign:"center",fontSize:11}}>{row.cf.toFixed(0)}%</span>}</td>
@@ -706,14 +880,13 @@ PLAN: 4500_PYME
           </div>
         </div>);
       })}
-
       {results.length===0&&(<div style={{...card(),textAlign:"center",padding:"3rem",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay empleados mapeados a ningún plan Omint.</p></div>)}
       <button onClick={()=>setSub(needsMapeo?"mapeo":1)} style={{...btnS,marginTop:"0.5rem"}}>← Volver</button>
     </div>)}
   </div>);
 }
 
-// ─── APP SHELL ───────────────────────────────────────────────────────────────
+// ── APP SHELL ─────────────────────────────────────────────────────────────────
 export default function App(){
   const [sec,setSec]=useState("cotizador");
   const [precios,setPrecios]=useState(null);
@@ -723,10 +896,8 @@ export default function App(){
   const [loaded,setLoaded]=useState(false);
 
   useEffect(()=>{
-    setPrecios(lsGet("omint-precios",{}));
-    setCostos(lsGet("omint-costos",{}));
-    setQuotes(lsGet("omint-quotes",[]));
-    setApiKey(lsGet("omint-apikey",""));
+    setPrecios(lsGet("omint-precios",{}));setCostos(lsGet("omint-costos",{}));
+    setQuotes(lsGet("omint-quotes",[]));setApiKey(lsGet("omint-apikey",""));
     setLoaded(true);
   },[]);
 
