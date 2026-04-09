@@ -943,27 +943,6 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
     r.readAsBinaryString(f);
   }
 
-}
-
-  function validarNomina(){
-    if(!emps||!map.titAge)return;
-    const errs=[];
-    let sinEdad=0,edadRara=0,sinPlan=0;
-    emps.forEach(e=>{
-      const edad=parseInt(e[map.titAge]);
-      if(isNaN(edad)||edad===0)sinEdad++;
-      else if(edad<18||edad>85)edadRara++;
-      if(map.planCol&&!e[map.planCol])sinPlan++;
-    });
-    if(sinEdad>0)errs.push({tipo:"error",msg:`${sinEdad} fila${sinEdad>1?"s":""} sin edad del titular`});
-    if(edadRara>0)errs.push({tipo:"warning",msg:`${edadRara} titular${edadRara>1?"es":""} con edad fuera de rango (18-85)`});
-    if(sinPlan>0&&map.planCol)errs.push({tipo:"warning",msg:`${sinPlan} fila${sinPlan>1?"s":""} sin plan asignado`});
-    if(emps.length<5)errs.push({tipo:"info",msg:"Nómina pequeña (menos de 5 empleados)"});
-    setNomErrors(errs);
-  }
-
-  useEffect(()=>{if(emps&&map.titAge)validarNomina();},[emps,map.titAge,map.planCol]);
-
   async function sendChat(){
     if(!chatIn.trim()||chatLoading||!results.length)return;
     if(!apiKey){alert("Configurá tu API key en Configuración.");return;}
