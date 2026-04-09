@@ -782,17 +782,30 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
     const m=chatIn.trim();setChatIn("");
     const hist=[...chat,{role:"user",content:m}];setChat(hist);setCL(true);
     const resumen=results.map(r=>`${r.zona}/${r.planId}: ${r.bd.totalSocios} socios, fac=$${fmt(r.bd.totalFac)}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join(" | ");
-    const sys=`Sos un motor de ajuste de precios. NUNCA escribas explicaciones. SOLO respondé con el bloque exacto de abajo.
-Cuando el usuario pida un cambio de precios, calculá los nuevos valores y respondé ÚNICAMENTE con este formato, sin ningún texto antes ni después:
+    const sys=`Sos un asistente de cotización de Omint. Ajustás precios según pedidos del usuario.
+
+REGLAS:
+- Respondé SIEMPRE con confirmación en una línea + bloque ZONA/PLAN/JSON
+- Si el usuario no especifica zona, aplicá el cambio a todos los planes/zonas relevantes
+- Si el usuario pide cambiar solo una categoría, el resto de los valores quedan EXACTAMENTE igual
+- Calculá con precisión: "subir 10%" = multiplicar por 1.10, "bajar 10%" = multiplicar por 0.90
+- Podés recibir pedidos como: "bajá 10% el s0_25 del 4500_PYME en AMBA", "subí todos los precios 5%", "poné el s60plus en 500000", etc.
+- Si hay múltiples planes a modificar, mandá un bloque por plan
+
+CATEGORÍAS: s0_25=Socio 0-25, s26_34=Socio 26-35, s35_54=Socio 36-54, s55_59=Socio 55-59, s60plus=Socio 60+, h1=Hijo1, h2plus=Hijo2+
+
+FORMATO (repetir por cada plan modificado):
+[una línea explicando qué hiciste]
 ZONA: [zona]
 PLAN: [plan]
 \`\`\`json
 {"s0_25":0,"s26_34":0,"s35_54":0,"s55_59":0,"s60plus":0,"h1":0,"h2plus":0}
 \`\`\`
-PRECIOS ACTUALES: ${results.map(r=>`${r.zona}/${r.planId}: ${CAT_IDS.map(c=>`${c}=$${r.bd.rows.find(x=>x.id===c)?.precio||0}`).join(", ")}`).join(" | ")}
+
+PRECIOS ACTUALES:
+${results.map(r=>`${r.zona}/${r.planId} → s0_25=${r.bd.rows.find(x=>x.id==="s0_25")?.precio||0}, s26_34=${r.bd.rows.find(x=>x.id==="s26_34")?.precio||0}, s35_54=${r.bd.rows.find(x=>x.id==="s35_54")?.precio||0}, s55_59=${r.bd.rows.find(x=>x.id==="s55_59")?.precio||0}, s60plus=${r.bd.rows.find(x=>x.id==="s60plus")?.precio||0}, h1=${r.bd.rows.find(x=>x.id==="h1")?.precio||0}, h2plus=${r.bd.rows.find(x=>x.id==="h2plus")?.precio||0}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join("\n")}
 TOTAL: fac=${fmt(grandFac)}, C/F=${grandCF.toFixed(1)}%
-Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}
-Planes disponibles: ${[...new Set(results.map(r=>r.planId))].join(", ")}`;
+Referencia C/F: ≤70% excelente, 70-82% aceptable, >82% alto`;
     try{
       const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:700,messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]})});
       const data=await res.json();
