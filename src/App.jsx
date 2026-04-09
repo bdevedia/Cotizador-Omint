@@ -38,8 +38,113 @@ const fmtD=d=>new Date(d).toLocaleDateString("es-AR",{day:"2-digit",month:"2-dig
 function exJSON(t){const m=t.match(/```json\s*([\s\S]*?)```/);if(m){try{return JSON.parse(m[1]);}catch{}}try{const m2=t.match(/\{[\s\S]*?\}/);if(m2)return JSON.parse(m2[0]);}catch{}return null;}
 function stripJ(t){return t.replace(/```json[\s\S]*?```/g,"").replace(/\{[^}]*\}/g,"").trim();}
 
-// ── TIER para detección de inversión de precios ───────────────────────────────
-function planTier(id){const m=String(id).match(/^(\d+)/);return m?parseInt(m[1]):0;}
+// ── PARSER DE NÓMINA (formato fijo) ─────────────────────────────────────────
+// Columnas requeridas: "Grupo Familiar", "Tipo benef", y al menos una de "Edad" | "Fecha de Nacimiento"
+// Columnas opcionales: "Nombre", "Plan de contratación", "Zona"
+// Tipo benef acepta: Titular/T, Conyuge/Cónyuge/C, Hijo/H
+
+const REQUIRED_COLS_HINTS=[
+  ["grupo familiar","grupo","nsoc","familia","id familia"],
+  ["tipo benef","parentesco","tipo","relacion","beneficiario"],
+];
+const PLAN_COL_HINTS=["plan de contratación","plan contratacion","plan de contratacion","plan","equivalencia","plan_med"];
+const EDAD_COL_HINTS=["edad","age","años"];
+const FECHA_COL_HINTS=["fecha de nacimiento","fecha nacimiento","fecha_nacimiento","nacimiento","birth","fecha nac","fec nac"];
+const ZONA_COL_HINTS=["zona","provincia","region","localidad"];
+const NOMBRE_COL_HINTS=["nombre","name","titular","apellido","empleado","apellido y nombre"];
+
+function findColHints(cols,hints){
+  const low=cols.map(x=>String(x).toLowerCase().trim());
+  for(const h of hints){const i=low.findIndex(c=>c===h||c.includes(h));if(i>=0)return cols[i];}
+  return null;
+}
+
+function calcEdadDesde(fechaStr){
+  if(!fechaStr)return null;
+  const s=String(fechaStr).trim();
+  // Soporta: DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD, timestamp numérico Excel
+  let d;
+  const parts=s.split(/[.\-\/]/);
+  if(parts.length===3){
+    if(parts[0].length===4)d=new Date(+parts[0],+parts[1]-1,+parts[2]);
+    else d=new Date(+parts[2],+parts[1]-1,+parts[0]);
+  }else{d=new Date(s);}
+  if(isNaN(d.getTime()))return null;
+  const hoy=new Date();
+  let edad=hoy.getFullYear()-d.getFullYear();
+  if(hoy.getMonth()<d.getMonth()||(hoy.getMonth()===d.getMonth()&&hoy.getDate()<d.getDate()))edad--;
+  return edad>0&&edad<120?edad:null;
+}
+
+function parseNominaFija(rawRows,rawCols){
+  // Validar columnas requeridas
+  for(const hints of REQUIRED_COLS_HINTS){
+    if(!findColHints(rawCols,hints)){
+      return{error:`Columna faltante. Se necesita una columna con alguno de estos nombres: "${hints.slice(0,2).join('" o "')}". Revisá el template.`};
+    }
+  }
+  const hasEdad=!!findColHints(rawCols,EDAD_COL_HINTS);
+  const hasFecha=!!findColHints(rawCols,FECHA_COL_HINTS);
+  if(!hasEdad&&!hasFecha){
+    return{error:'Se necesita la columna "Edad" o "Fecha de Nacimiento". Revisá el template.'};
+  }
+
+  const colGrupo=findColHints(rawCols,["grupo familiar","grupo","nsoc","familia","id familia"]);
+  const colTipo=findColHints(rawCols,["tipo benef","parentesco","tipo","relacion","beneficiario"]);
+  const colEdad=findColHints(rawCols,EDAD_COL_HINTS);
+  const colFecha=findColHints(rawCols,FECHA_COL_HINTS);
+  const colPlan=findColHints(rawCols,PLAN_COL_HINTS);
+  const colZona=findColHints(rawCols,ZONA_COL_HINTS);
+  const colNombre=findColHints(rawCols,NOMBRE_COL_HINTS);
+
+  function getEdad(row){
+    if(colEdad){
+      const v=parseInt(row[colEdad]);
+      if(!isNaN(v)&&v>0&&v<120)return v;
+    }
+    if(colFecha)return calcEdadDesde(row[colFecha]);
+    return null;
+  }
+
+  function getTipo(row){
+    const t=String(row[colTipo]||"").trim().toLowerCase();
+    if(t==="titular"||t==="t"||t.startsWith("tit"))return"T";
+    if(t==="conyuge"||t==="cónyuge"||t==="c"||t.startsWith("con")||t.startsWith("esp"))return"C";
+    if(t==="hijo"||t==="hija"||t==="h"||t.startsWith("hij")||t==="menor")return"H";
+    return null;
+  }
+
+  const familias={};
+  let filasIgnoradas=0;
+  rawRows.forEach(row=>{
+    if(!row||row[colGrupo]==null)return;
+    const gid=String(row[colGrupo]).trim();
+    const tipo=getTipo(row);
+    if(!tipo){filasIgnoradas++;return;}
+    const edad=getEdad(row);
+    const plan=colPlan?String(row[colPlan]||"").trim():"";
+    const zona=colZona?String(row[colZona]||"").trim():"";
+    const nombre=colNombre?String(row[colNombre]||"").trim():"";
+    if(!familias[gid])familias[gid]={GRUPO:gid,NOMBRE:nombre,EDAD_TITULAR:null,EDAD_CONYUGE:0,HIJOS_MENORES_25:0,HIJOS_MAYORES_25:0,PLAN_ACTUAL:"",ZONA:zona};
+    if(tipo==="T"){
+      if(edad!==null)familias[gid].EDAD_TITULAR=edad;
+      if(plan)familias[gid].PLAN_ACTUAL=plan;
+      if(zona)familias[gid].ZONA=zona;
+      if(nombre&&nombre!=="-")familias[gid].NOMBRE=nombre;
+    }else if(tipo==="C"){
+      if(edad!==null)familias[gid].EDAD_CONYUGE=edad;
+    }else if(tipo==="H"){
+      if(edad!==null){
+        if(edad<25)familias[gid].HIJOS_MENORES_25++;
+        else familias[gid].HIJOS_MAYORES_25++;
+      }
+    }
+  });
+
+  const rows=Object.values(familias).filter(f=>f.EDAD_TITULAR!==null);
+  if(rows.length===0)return{error:"No se encontraron titulares con edad válida. Revisá el template."};
+  return{rows,filasIgnoradas,totalRaw:rawRows.length};
+}
 
 // ── PARSERS ───────────────────────────────────────────────────────────────────
 function parsePreciosSheet(rows){
@@ -455,13 +560,17 @@ const numInp=(w=90,adj=false)=>({width:w,textAlign:"right",fontSize:12,padding:"
 function downloadTemplate(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([
-    ["NOMBRE","EDAD_TITULAR","EDAD_CONYUGE","HIJOS_MENORES_25","HIJOS_MAYORES_25","PLAN_ACTUAL","ZONA"],
-    ["Juan Pérez",35,33,2,0,"4500_PYME","AMBA"],
-    ["María García",28,0,0,0,"Osde 310","AMBA"],
-    ["Carlos López",52,49,1,1,"Galeno ORO","Córdoba"],
-    ["Ana Martínez",61,58,0,2,"6500_PYME","Mendoza"],
+    ["Grupo Familiar","Fecha de Nacimiento","Edad","Nombre","Tipo benef","Plan de contratación","Zona"],
+    [1,"08.12.1961",64,"García Juan","Titular","4500_PYME","AMBA"],
+    [1,"01.03.1965",61,"García Ana","Conyuge","4500_PYME","AMBA"],
+    [1,"18.12.2014","","García Lucas","Hijo","4500_PYME","AMBA"],
+    [2,"05.09.1960",65,"López Pedro","Titular","6500_PYME","Córdoba"],
+    [2,"","","-","Conyuge","6500_PYME","Córdoba"],
+    [3,"10.11.1980",45,"Martínez Rosa","Titular","Osde 210","AMBA"],
+    [3,"15.06.1982",42,"Martínez Marcos","Conyuge","Osde 210","AMBA"],
+    [3,"20.03.2008","","Martínez Sofía","Hijo","Osde 210","AMBA"],
   ]);
-  ws["!cols"]=[{wch:22},{wch:14},{wch:14},{wch:18},{wch:18},{wch:14},{wch:10}];
+  ws["!cols"]=[{wch:15},{wch:20},{wch:6},{wch:22},{wch:12},{wch:22},{wch:12}];
   XLSX.utils.book_append_sheet(wb,ws,"Nómina");
   XLSX.writeFile(wb,"template_nomina_omint.xlsx");
 }
@@ -800,12 +909,33 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
     const f=e.target.files[0];if(!f)return;
     const r=new FileReader();
     r.onload=ev=>{
-      const wb=XLSX.read(ev.target.result,{type:"binary"});
-      const d=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{raw:false});
-      if(d.length>0){setCols(Object.keys(d[0]));setEmps(d);setNomErrors([]);}
+      try{
+        const wb=XLSX.read(ev.target.result,{type:"binary"});
+        // Intentar hoja "Nómina" o "Hoja1" o la primera disponible
+        const preferidas=["Nómina","Nomina","Hoja1","Sheet1","Data","nómina"];
+        const sheetName=preferidas.find(s=>wb.SheetNames.includes(s))||wb.SheetNames[0];
+        const raw=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{raw:false,defval:null});
+        if(!raw||raw.length===0){setNomErrors([{tipo:"error",msg:"El archivo está vacío."}]);return;}
+        const rawCols=Object.keys(raw[0]);
+        const result=parseNominaFija(raw,rawCols);
+        if(result.error){
+          setNomErrors([{tipo:"error",msg:result.error}]);
+          setEmps(null);return;
+        }
+        // Éxito — cargar con mapeo fijo (sin paso de configuración)
+        setEmps(result.rows);
+        setCols(Object.keys(result.rows[0]));
+        setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
+        const info=`✓ ${result.rows.length} familias cargadas (${result.totalRaw} filas procesadas${result.filasIgnoradas>0?`, ${result.filasIgnoradas} ignoradas`:""})`;
+        setNomErrors([{tipo:"info",msg:info}]);
+      }catch(err){
+        setNomErrors([{tipo:"error",msg:"Error al leer el archivo. Revisá el template."}]);
+      }
     };
     r.readAsBinaryString(f);
   }
+
+}
 
   function validarNomina(){
     if(!emps||!map.titAge)return;
@@ -954,38 +1084,68 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     {/* STEP 1 */}
     {sub===1&&(<div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem"}}>
-        <div><h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Cargar nómina</h3><p style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>Columnas PLAN_ACTUAL y ZONA son opcionales pero recomendadas.</p></div>
+        <div><h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Cargar nómina</h3><p style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>Subí el Excel con el formato del template. Las columnas se detectan automáticamente.</p></div>
         <button onClick={downloadTemplate} style={{...btnS,fontSize:12}}>↓ Template</button>
       </div>
-      {!emps?(<label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,padding:"3rem",border:`2px dashed ${BLUE}`,borderRadius:12,cursor:"pointer",background:BLUE_LT}}>
-        <div style={{width:56,height:56,borderRadius:12,background:BLUE,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>📂</div>
-        <div style={{textAlign:"center"}}><p style={{fontSize:15,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Subir Excel o CSV</p><p style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>.xlsx · .xls · .csv</p></div>
-        <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{display:"none"}}/>
-      </label>):(<div>
+      {!emps?(<div>
+        <label style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,padding:"3rem",border:`2px dashed ${BLUE}`,borderRadius:12,cursor:"pointer",background:BLUE_LT}}>
+          <div style={{width:56,height:56,borderRadius:12,background:BLUE,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>📂</div>
+          <div style={{textAlign:"center"}}>
+            <p style={{fontSize:15,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Subir Excel o CSV</p>
+            <p style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>.xlsx · .xls · .csv</p>
+          </div>
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{display:"none"}}/>
+        </label>
+        <div style={{marginTop:"1rem",padding:"12px 16px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10}}>
+          <p style={{fontSize:12,fontWeight:600,color:"#166534",marginBottom:6,fontFamily:FONT}}>📋 Formato esperado — una fila por miembro:</p>
+          <div style={{overflowX:"auto"}}>
+            <table style={{borderCollapse:"collapse",fontSize:11,fontFamily:FONT,background:"#fff",borderRadius:6,overflow:"hidden"}}>
+              <thead><tr style={{background:"#166534",color:"#fff"}}>
+                {["Grupo Familiar","Fecha de Nacimiento","Edad","Nombre","Tipo benef","Plan de contratación","Zona (opcional)"].map(h=><th key={h} style={{padding:"5px 10px",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {[["1","08.12.1961","64","García Juan","Titular","4500_PYME","AMBA"],
+                  ["1","01.03.1965","61","García Ana","Conyuge","4500_PYME","AMBA"],
+                  ["1","18.12.2014","","García Lucas","Hijo","4500_PYME","AMBA"],
+                  ["2","05.09.1960","65","López Pedro","Titular","6500_PYME",""],
+                ].map((row,i)=><tr key={i} style={{background:i%2===0?"#F0FDF4":"#fff"}}>
+                  {row.map((v,j)=><td key={j} style={{padding:"4px 10px",color:"#374151"}}>{v}</td>)}
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+          <p style={{fontSize:11,color:"#374151",marginTop:8,fontFamily:FONT}}>
+            Tipo benef acepta: <strong>Titular</strong>, <strong>Conyuge</strong>, <strong>Hijo</strong>. 
+            Si Edad está vacía se calcula desde Fecha de Nacimiento. 
+            Zona es opcional (si no está, se elige globalmente).
+          </p>
+        </div>
+      </div>):(<div>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#D1FAE5",borderRadius:8,marginBottom:"1.25rem",border:"1px solid #A7F3D0"}}>
           <span>✅</span><span style={{fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{emps.length} empleados cargados</span>
-          <button onClick={()=>{setEmps(null);setCols([]);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});setPlanMapping({});}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",fontFamily:FONT}}>Cambiar</button>
+          <button onClick={()=>{setEmps(null);setCols([]);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});setPlanMapping({});setNomErrors([]);}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",color:"#9CA3AF",fontFamily:FONT}}>✕ Cambiar</button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:"1.25rem"}}>
-          {[{k:"name",l:"Nombre",req:false},{k:"titAge",l:"Edad titular *",req:true},{k:"spAge",l:"Edad cónyuge",req:false},{k:"ku",l:"N° hijos <25 *",req:true},{k:"k25",l:"N° hijos ≥25",req:false},{k:"planCol",l:"Columna plan actual",req:false},{k:"zonaCol",l:"Columna zona",req:false}].map(({k,l,req})=>(<div key={k}>
-            <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>{l}</label>
-            <select value={map[k]} onChange={e=>setMap(p=>({...p,[k]:e.target.value}))} style={{...inp,background:"#fff"}}><option value="">{req?"Seleccionar…":"No aplica"}</option>{cols.map(c=><option key={c} value={c}>{c}</option>)}</select>
-          </div>))}
-        </div>
+
         {!hasZonaCol&&(<div style={{padding:"12px 16px",background:BLUE_LT,borderRadius:8,marginBottom:"1rem",border:`1px solid ${BORDER}`}}>
           <p style={{fontSize:12,color:BLUE,fontWeight:600,marginBottom:8,fontFamily:FONT}}>Sin columna de zona — asignás una para todos:</p>
           <div style={{display:"flex",gap:8}}>{ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z];return(<button key={z} onClick={()=>setGlobalZona(z)} style={{padding:"6px 14px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:globalZona===z?700:400,background:globalZona===z?zc2.c:"#fff",color:globalZona===z?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>{z}</button>);})}</div>
         </div>)}
       </div>)}
-      {/* Alertas de validación de nómina */}
+      {/* Alertas de nómina */}
       {nomErrors.length>0&&<div style={{marginTop:"1rem",display:"flex",flexDirection:"column",gap:6}}>
-        {nomErrors.map((e,i)=><div key={i} style={{padding:"8px 12px",borderRadius:8,fontSize:12,fontFamily:FONT,
-          background:e.tipo==="error"?"#FEF2F2":e.tipo==="warning"?"#FEF3C7":"#EFF6FF",
-          color:e.tipo==="error"?"#DC2626":e.tipo==="warning"?"#92400E":"#1D4ED8",
-          border:`1px solid ${e.tipo==="error"?"#FECACA":e.tipo==="warning"?"#FDE68A":"#BFDBFE"}`}}>
-          {e.tipo==="error"?"⚠️":e.tipo==="warning"?"⚡":"ℹ️"} {e.msg}
-        </div>)}
+        {nomErrors.map((e,i)=>{
+          const isErr=e.tipo==="error";
+          return(<div key={i} style={{padding:"12px 16px",borderRadius:10,fontSize:13,fontFamily:FONT,fontWeight:isErr?600:400,
+            background:isErr?"#FEF2F2":e.tipo==="warning"?"#FEF3C7":"#EFF6FF",
+            color:isErr?"#DC2626":e.tipo==="warning"?"#92400E":"#1D4ED8",
+            border:`1.5px solid ${isErr?"#FECACA":e.tipo==="warning"?"#FDE68A":"#BFDBFE"}`,
+            display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:isErr?20:14}}>{isErr?"❌":e.tipo==="warning"?"⚠️":"✅"}</span>
+            <span>{isErr?<><strong>Error:</strong> {e.msg}</>:e.msg}</span>
+          </div>);
+        })}
       </div>}
+
       {emps&&map.titAge&&map.ku&&(<button onClick={()=>needsMapeo?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>{needsMapeo?"Continuar: mapear planes →":"Ver cotización →"}</button>)}
     </div>)}
 
