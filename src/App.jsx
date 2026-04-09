@@ -480,9 +480,16 @@ function ExportModal({results,empresa,empsRef,onClose}){
 
   function exportPDF(){
     const html=generateProposalHTML(cfg,results);
-    const w=window.open("","_blank");
-    w.document.write(html);w.document.close();
-    setTimeout(()=>w.print(),400);
+    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const w=window.open(url,"_blank");
+    // Auto-print cuando carga
+    if(w){
+      w.addEventListener("load",()=>{
+        setTimeout(()=>{w.print();},300);
+      });
+    }
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
   }
 
   const overlay={position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"};
@@ -672,14 +679,30 @@ function Historial({quotes,onUpdate}){
           {isOpen&&<div style={{borderTop:`1px solid ${BORDER}`}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr>{["Fecha","Socios","Facturación","Costo","C/F","Estado",""].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
-              <tbody>{list.map(q=>{const cf=q.cfTotal||0;return(<tr key={q.id}>
-                <td style={TD({})}>{fmtD(q.fecha)}</td><td style={TD({textAlign:"right",color:"#6B7280"})}>{q.socios||"—"}</td>
-                <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(q.totalFac||q.total)}</td>
-                <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(q.totalCosto||0)}</td>
-                <td style={TD({textAlign:"right"})}>{cf>0&&<span style={{...badge(cfColor(cf),cfBg(cf)),minWidth:52,display:"inline-block",textAlign:"center"}}>{cf.toFixed(1)}%</span>}</td>
-                <td style={TD({textAlign:"right"})}><span style={badge(q.status==="cerrado"?"#065F46":"#92400E",q.status==="cerrado"?"#D1FAE5":"#FEF3C7")}>{q.status==="cerrado"?"Cerrado":"Abierto"}</span></td>
-                <td style={TD({textAlign:"right"})}>{q.status==="abierto"&&onUpdate&&<button onClick={()=>onUpdate(q.id,{status:"cerrado"})} style={{fontSize:11,padding:"4px 10px",border:`1px solid ${BORDER}`,borderRadius:6,cursor:"pointer",background:"#fff",color:BLUE,fontWeight:500,fontFamily:FONT}}>Cerrar</button>}</td>
-              </tr>);})}</tbody>
+              <tbody>{list.map(q=>{const cf=q.cfTotal||0;const [expSnap,setExpSnap]=useState(false);return(<Fragment key={q.id}>
+                <tr>
+                  <td style={TD({})}>{fmtD(q.fecha)}</td><td style={TD({textAlign:"right",color:"#6B7280"})}>{q.socios||"—"}</td>
+                  <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(q.totalFac||q.total)}</td>
+                  <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(q.totalCosto||0)}</td>
+                  <td style={TD({textAlign:"right"})}>{cf>0&&<span style={{...badge(cfColor(cf),cfBg(cf)),minWidth:52,display:"inline-block",textAlign:"center"}}>{cf.toFixed(1)}%</span>}</td>
+                  <td style={TD({textAlign:"right"})}><span style={badge(q.status==="cerrado"?"#065F46":"#92400E",q.status==="cerrado"?"#D1FAE5":"#FEF3C7")}>{q.status==="cerrado"?"Cerrado":"Abierto"}</span></td>
+                  <td style={TD({textAlign:"right",display:"flex",gap:4,justifyContent:"flex-end"})}>
+                    {q.snapshot&&<button onClick={()=>setExpSnap(p=>!p)} style={{fontSize:11,padding:"4px 8px",border:`1px solid ${BORDER}`,borderRadius:6,cursor:"pointer",background:"#fff",color:"#374151",fontFamily:FONT}}>{expSnap?"▲":"▼"}</button>}
+                    {q.status==="abierto"&&onUpdate&&<button onClick={()=>onUpdate(q.id,{status:"cerrado"})} style={{fontSize:11,padding:"4px 10px",border:`1px solid ${BORDER}`,borderRadius:6,cursor:"pointer",background:"#fff",color:BLUE,fontWeight:500,fontFamily:FONT}}>Cerrar</button>}
+                  </td>
+                </tr>
+                {expSnap&&q.snapshot&&<tr><td colSpan={7} style={{padding:"8px 16px",background:GRAY,borderBottom:`1px solid ${BORDER}`}}>
+                  <div style={{fontSize:11,fontFamily:FONT,color:"#374151",marginBottom:6,fontWeight:600}}>Detalle de precios cotizados:</div>
+                  <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                    {q.snapshot.map((s,si)=><div key={si} style={{padding:"8px 12px",background:"#fff",borderRadius:8,border:`1px solid ${BORDER}`,minWidth:180}}>
+                      <p style={{fontSize:11,fontWeight:700,color:BLUE,fontFamily:FONT,marginBottom:4}}>{s.zona} · {s.planId}</p>
+                      <p style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>{s.socios} socios · C/F {s.cf?.toFixed(1)}%</p>
+                      <p style={{fontSize:11,color:BLUE,fontFamily:FONT}}>Fac: ${fmt(s.fac)}</p>
+                    </div>)}
+                  </div>
+                  {q.aiLog?.length>0&&<div style={{marginTop:8}}><p style={{fontSize:11,fontWeight:600,color:"#374151",fontFamily:FONT,marginBottom:4}}>Ajustes IA:</p>{q.aiLog.map((l,li)=><p key={li} style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>• {l.ts} — {l.pedido}</p>)}</div>}
+                </td></tr>}
+              </Fragment>);})}</tbody>
             </table>
           </div>}
         </div>
@@ -694,9 +717,9 @@ function Configuracion({apiKey,onSave}){
   return(<div>
     <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:6,fontFamily:FONT}}>Configuración</h2>
     <div style={card()}>
-      <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>API Key de OpenRouter</label>
-      <input type="password" value={k} onChange={e=>setK(e.target.value)} placeholder="sk-or-..." style={{...inp,maxWidth:480,marginBottom:10}}/>
-      <p style={{fontSize:11,color:"#9CA3AF",marginBottom:14,fontFamily:FONT}}>Gratis en <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer" style={{color:BLUE}}>openrouter.ai</a> → Management Keys</p>
+      <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>API Key de Groq</label>
+      <input type="password" value={k} onChange={e=>setK(e.target.value)} placeholder="gsk_..." style={{...inp,maxWidth:480,marginBottom:10}}/>
+      <p style={{fontSize:11,color:"#9CA3AF",marginBottom:14,fontFamily:FONT}}>Gratis en <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{color:BLUE}}>console.groq.com</a> → API Keys</p>
       <button onClick={()=>{onSave(k);setOk(true);setTimeout(()=>setOk(false),2500);}} style={btnP}>{ok?"✓ Guardado":"Guardar"}</button>
     </div>
   </div>);
@@ -719,6 +742,10 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
   const [chatIn,setChatIn]=useState("");
   const [chatLoading,setCL]=useState(false);
   const [saveMsg,setSaveMsg]=useState("");
+  const [aiLog,setAiLog]=useState([]); // log de cambios de IA
+  const [scenarios,setScenarios]=useState({}); // {name: {adjPrices, adjCostos}}
+  const [showScenarios,setShowScenarios]=useState(false);
+  const [nomErrors,setNomErrors]=useState([]); // validación de nómina
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
@@ -772,9 +799,32 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
   function handleFile(e){
     const f=e.target.files[0];if(!f)return;
     const r=new FileReader();
-    r.onload=ev=>{const wb=XLSX.read(ev.target.result,{type:"binary"});const d=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{raw:false});if(d.length>0){setCols(Object.keys(d[0]));setEmps(d);}};
+    r.onload=ev=>{
+      const wb=XLSX.read(ev.target.result,{type:"binary"});
+      const d=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{raw:false});
+      if(d.length>0){setCols(Object.keys(d[0]));setEmps(d);setNomErrors([]);}
+    };
     r.readAsBinaryString(f);
   }
+
+  function validarNomina(){
+    if(!emps||!map.titAge)return;
+    const errs=[];
+    let sinEdad=0,edadRara=0,sinPlan=0;
+    emps.forEach(e=>{
+      const edad=parseInt(e[map.titAge]);
+      if(isNaN(edad)||edad===0)sinEdad++;
+      else if(edad<18||edad>85)edadRara++;
+      if(map.planCol&&!e[map.planCol])sinPlan++;
+    });
+    if(sinEdad>0)errs.push({tipo:"error",msg:`${sinEdad} fila${sinEdad>1?"s":""} sin edad del titular`});
+    if(edadRara>0)errs.push({tipo:"warning",msg:`${edadRara} titular${edadRara>1?"es":""} con edad fuera de rango (18-85)`});
+    if(sinPlan>0&&map.planCol)errs.push({tipo:"warning",msg:`${sinPlan} fila${sinPlan>1?"s":""} sin plan asignado`});
+    if(emps.length<5)errs.push({tipo:"info",msg:"Nómina pequeña (menos de 5 empleados)"});
+    setNomErrors(errs);
+  }
+
+  useEffect(()=>{if(emps&&map.titAge)validarNomina();},[emps,map.titAge,map.planCol]);
 
   async function sendChat(){
     if(!chatIn.trim()||chatLoading||!results.length)return;
@@ -859,13 +909,28 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         });
       }
       const expl=full.replace(/```json[\s\S]*?```/g,"").replace(/ZONA:\s*\S+/g,"").replace(/PLAN:\s*\S+/g,"").trim()||"✓ Precios actualizados";
+      if(allMatches.length>0){
+        setAiLog(prev=>[...prev,{ts:new Date().toLocaleTimeString("es-AR"),pedido:m,resultado:expl,planes:allMatches.map(x=>x[2]).join(", ")}]);
+      }
       setChat([...hist,{role:"assistant",content:expl,upd:allMatches.length>0}]);
     }catch(err){setChat([...hist,{role:"assistant",content:"Error: "+err.message}]);}
     setCL(false);
   }
 
   function guardar(status){
-    onSaveQuote({id:Date.now().toString(),empresa:empresa.trim()||"Sin nombre",status,fecha:new Date().toISOString(),total:grandFac,totalFac:grandFac,totalCosto:grandCosto,cfTotal:grandCF,socios:emps?.length||0});
+    // Guardar snapshot completo incluyendo precios ajustados y log de IA
+    const snapshot=results.map(r=>({
+      zona:r.zona,planId:r.planId,socios:r.bd.totalSocios,
+      fac:r.bd.totalFac,costo:r.bd.totalCosto,cf:r.bd.cfTotal,
+      precios:Object.fromEntries(CAT_IDS.map(id=>[id,r.bd.rows.find(x=>x.id===id)?.precio||0])),
+    }));
+    onSaveQuote({
+      id:Date.now().toString(),empresa:empresa.trim()||"Sin nombre",status,
+      fecha:new Date().toISOString(),total:grandFac,totalFac:grandFac,
+      totalCosto:grandCosto,cfTotal:grandCF,socios:emps?.length||0,
+      adjPrices:{...adjPrices},adjCostos:{...adjCostos},
+      aiLog:[...aiLog],snapshot,
+    });
     setSaveMsg(status==="cerrado"?"✓ Guardado como cerrado":"✓ Guardado como abierto");
     setTimeout(()=>setSaveMsg(""),2500);
   }
@@ -912,6 +977,15 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           <div style={{display:"flex",gap:8}}>{ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z];return(<button key={z} onClick={()=>setGlobalZona(z)} style={{padding:"6px 14px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:globalZona===z?700:400,background:globalZona===z?zc2.c:"#fff",color:globalZona===z?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>{z}</button>);})}</div>
         </div>)}
       </div>)}
+      {/* Alertas de validación de nómina */}
+      {nomErrors.length>0&&<div style={{marginTop:"1rem",display:"flex",flexDirection:"column",gap:6}}>
+        {nomErrors.map((e,i)=><div key={i} style={{padding:"8px 12px",borderRadius:8,fontSize:12,fontFamily:FONT,
+          background:e.tipo==="error"?"#FEF2F2":e.tipo==="warning"?"#FEF3C7":"#EFF6FF",
+          color:e.tipo==="error"?"#DC2626":e.tipo==="warning"?"#92400E":"#1D4ED8",
+          border:`1px solid ${e.tipo==="error"?"#FECACA":e.tipo==="warning"?"#FDE68A":"#BFDBFE"}`}}>
+          {e.tipo==="error"?"⚠️":e.tipo==="warning"?"⚡":"ℹ️"} {e.msg}
+        </div>)}
+      </div>}
       {emps&&map.titAge&&map.ku&&(<button onClick={()=>needsMapeo?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>{needsMapeo?"Continuar: mapear planes →":"Ver cotización →"}</button>)}
     </div>)}
 
@@ -980,6 +1054,35 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         </div>
       </div>
       {saveMsg&&<div style={{padding:"10px 16px",background:"#D1FAE5",borderRadius:8,fontSize:13,color:"#065F46",fontWeight:600,marginBottom:"1rem",fontFamily:FONT}}>{saveMsg}</div>}
+
+      {/* AI LOG PANEL */}
+      {aiLog.length>0&&(<div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <p style={{fontSize:12,fontWeight:600,color:"#374151",fontFamily:FONT}}>📋 Historial de ajustes IA ({aiLog.length})</p>
+          <button onClick={()=>setAiLog([])} style={{fontSize:11,color:"#9CA3AF",background:"none",border:"none",cursor:"pointer",fontFamily:FONT}}>Limpiar</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:160,overflowY:"auto"}}>
+          {[...aiLog].reverse().map((e,i)=>(
+            <div key={i} style={{fontSize:11,padding:"6px 10px",background:GRAY,borderRadius:6,fontFamily:FONT}}>
+              <span style={{color:"#9CA3AF",marginRight:8}}>{e.ts}</span>
+              <span style={{color:BLUE,fontWeight:600}}>{e.planes}</span>
+              <span style={{color:"#374151",marginLeft:6}}>← "{e.pedido}"</span>
+            </div>
+          ))}
+        </div>
+      </div>)}
+
+      {/* ESCENARIOS */}
+      <div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <p style={{fontSize:12,fontWeight:600,color:"#374151",fontFamily:FONT,marginRight:4}}>🎭 Escenarios:</p>
+          {Object.keys(scenarios).map(name=>(
+            <button key={name} onClick={()=>{setAdjPrices(scenarios[name].adjPrices);setAdjCostos(scenarios[name].adjCostos);}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px solid ${BLUE}`,background:"#fff",color:BLUE,cursor:"pointer",fontFamily:FONT}}>{name}</button>
+          ))}
+          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&(<button onClick={()=>{const name=prompt("Nombre del escenario:");if(name?.trim())setScenarios(p=>({...p,[name.trim()]:{adjPrices:{...adjPrices},adjCostos:{...adjCostos}}}));}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px dashed #9CA3AF`,background:"#fff",color:"#374151",cursor:"pointer",fontFamily:FONT}}>+ Guardar escenario</button>)}
+          {Object.keys(scenarios).length===0&&Object.keys(adjPrices).length===0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>Ajustá precios y guardá como escenario para comparar</span>}
+        </div>
+      </div>
 
       {/* IA */}
       <div style={{background:BLUE,borderRadius:12,padding:"16px 20px",marginBottom:"1.5rem"}}>
@@ -1108,6 +1211,7 @@ export default function App(){
   const [quotes,setQuotes]=useState([]);
   const [apiKey,setApiKey]=useState("");
   const [loaded,setLoaded]=useState(false);
+  const [syncStatus,setSyncStatus]=useState("idle"); // idle | syncing | ok | error
 
   useEffect(()=>{
     (async()=>{
@@ -1122,8 +1226,8 @@ export default function App(){
     })();
   },[]);
 
-  function savePre(p){setPrecios(p);lsSet("omint-precios",p);dbSet("precios",p);}
-  function saveCos(c){setCostos(c);lsSet("omint-costos",c);dbSet("costos",c);}
+  async function savePre(p){setPrecios(p);lsSet("omint-precios",p);setSyncStatus("syncing");try{await dbSet("precios",p);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch{setSyncStatus("error");}}
+  async function saveCos(c){setCostos(c);lsSet("omint-costos",c);setSyncStatus("syncing");try{await dbSet("costos",c);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch{setSyncStatus("error");}}
   function saveQuote(q){const nq=[q,...quotes];setQuotes(nq);lsSet("omint-quotes",nq);}
   function updQuote(id,upd){const nq=quotes.map(q=>q.id===id?{...q,...upd}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
   function saveApiKey(k){setApiKey(k);lsSet("omint-apikey",k);}
@@ -1150,7 +1254,14 @@ export default function App(){
           borderLeft:sec===item.id?`3px solid ${BLUE}`:"3px solid transparent"}}>{item.label}</button>))}
       </nav>
       {loaded&&(<div style={{padding:"1rem 1.25rem",borderTop:`1px solid ${BORDER}`,background:BLUE_LT}}>
-        <p style={{fontSize:11,fontWeight:600,color:BLUE,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Resumen</p>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <p style={{fontSize:11,fontWeight:600,color:BLUE,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Resumen</p>
+          <span style={{fontSize:9,padding:"2px 7px",borderRadius:10,fontFamily:FONT,fontWeight:600,
+            background:syncStatus==="ok"?"#D1FAE5":syncStatus==="syncing"?"#FEF3C7":syncStatus==="error"?"#FEF2F2":"#F3F4F6",
+            color:syncStatus==="ok"?"#065F46":syncStatus==="syncing"?"#92400E":syncStatus==="error"?"#DC2626":"#9CA3AF"}}>
+            {syncStatus==="ok"?"✓ Sync":syncStatus==="syncing"?"↻ Sync...":syncStatus==="error"?"✗ Error":"● Local"}
+          </span>
+        </div>
         {[{l:"Abiertos",v:quotes.filter(q=>q.status==="abierto").length,c:"#92400E",bg:"#FEF3C7"},{l:"Cerrados",v:quotes.filter(q=>q.status==="cerrado").length,c:"#065F46",bg:"#D1FAE5"},{l:"Empresas",v:knownEmpresas.length,c:BLUE,bg:"#fff"}].map(s=>(<div key={s.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}><span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{s.l}</span><span style={{...badge(s.c,s.bg),fontSize:11}}>{s.v}</span></div>))}
       </div>)}
     </div>
