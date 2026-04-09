@@ -565,6 +565,13 @@ function Importar({onPreciosImport,onCostosImport}){
       <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Flujo mensual de actualización</p>
       <p style={{fontSize:12,color:"#374151",lineHeight:1.7,fontFamily:FONT}}>1. Importá el nuevo XLS de precios → 2. Importá el XLSX de costos → 3. Los valores se guardan automáticamente y se usan en todas las cotizaciones nuevas. Los ajustes manuales que hayas hecho en "Precios Vigentes" o "Costos Vigentes" se reemplazan al reimportar.</p>
     </div>
+    <div style={{...card(),marginTop:"1.5rem",border:"1px solid #FCA5A5",background:"#FFF5F5"}}>
+      <p style={{fontSize:13,fontWeight:600,color:"#DC2626",marginBottom:"1rem",fontFamily:FONT}}>Eliminar datos</p>
+      <div style={{display:"flex",gap:12}}>
+        <button onClick={()=>{if(confirm("¿Eliminar todos los precios?"))onPreciosImport({});}} style={{...btnS,color:"#DC2626",borderColor:"#FCA5A5",fontSize:13}}>🗑 Eliminar precios</button>
+        <button onClick={()=>{if(confirm("¿Eliminar todos los costos?"))onCostosImport({});}} style={{...btnS,color:"#DC2626",borderColor:"#FCA5A5",fontSize:13}}>🗑 Eliminar costos</button>
+      </div>
+    </div>
   </div>);
 }
 
