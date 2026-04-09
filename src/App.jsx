@@ -782,16 +782,17 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
     const m=chatIn.trim();setChatIn("");
     const hist=[...chat,{role:"user",content:m}];setChat(hist);setCL(true);
     const resumen=results.map(r=>`${r.zona}/${r.planId}: ${r.bd.totalSocios} socios, fac=$${fmt(r.bd.totalFac)}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join(" | ");
-    const sys=`Sos el asistente comercial de Omint. Métrica clave: C/F (Costo/Facturación), menor es mejor.
-GRUPOS: ${resumen}
-TOTAL: fac=$${fmt(grandFac)}, C/F=${grandCF.toFixed(1)}%
-Referencia: ≤70% excelente, 70-82% aceptable, >82% alto.
-Al ajustar precios indicá ZONA y PLAN + JSON:
-ZONA: AMBA
-PLAN: 4500_PYME
+    const sys=`Sos un motor de ajuste de precios. NUNCA escribas explicaciones. SOLO respondé con el bloque exacto de abajo.
+Cuando el usuario pida un cambio de precios, calculá los nuevos valores y respondé ÚNICAMENTE con este formato, sin ningún texto antes ni después:
+ZONA: [zona]
+PLAN: [plan]
 \`\`\`json
 {"s0_25":0,"s26_34":0,"s35_54":0,"s55_59":0,"s60plus":0,"h1":0,"h2plus":0}
-\`\`\``;
+\`\`\`
+PRECIOS ACTUALES: ${results.map(r=>`${r.zona}/${r.planId}: ${CAT_IDS.map(c=>`${c}=$${r.bd.rows.find(x=>x.id===c)?.precio||0}`).join(", ")}`).join(" | ")}
+TOTAL: fac=${fmt(grandFac)}, C/F=${grandCF.toFixed(1)}%
+Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}
+Planes disponibles: ${[...new Set(results.map(r=>r.planId))].join(", ")}`;
     try{
       const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:700,messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]})});
       const data=await res.json();
