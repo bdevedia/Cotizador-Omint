@@ -781,61 +781,81 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
     if(!apiKey){alert("Configurá tu API key en Configuración.");return;}
     const m=chatIn.trim();setChatIn("");
     const hist=[...chat,{role:"user",content:m}];setChat(hist);setCL(true);
-    const resumen=results.map(r=>`${r.zona}/${r.planId}: ${r.bd.totalSocios} socios, fac=$${fmt(r.bd.totalFac)}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join(" | ");
-    const sys=`Sos un asistente de cotización de Omint. Ajustás precios según pedidos del usuario.
 
-REGLAS:
-- Respondé SIEMPRE con confirmación en una línea + bloque ZONA/PLAN/JSON
-- Si el usuario no especifica zona, aplicá el cambio a todos los planes/zonas relevantes
-- Si el usuario pide cambiar solo una categoría, el resto de los valores quedan EXACTAMENTE igual
-- Calculá con precisión: "subir 10%" = multiplicar por 1.10, "bajar 10%" = multiplicar por 0.90
-- Podés recibir pedidos como: "bajá 10% el s0_25 del 4500_PYME en AMBA", "subí todos los precios 5%", "poné el s60plus en 500000", etc.
-- Si hay múltiples planes a modificar, mandá un bloque por plan
+    // Construir tabla de precios actuales EFECTIVOS (ya con ajustes aplicados)
+    const preciosActuales=results.map(r=>{
+      const cats=CAT_IDS.map(id=>{
+        const precio=r.bd.rows.find(x=>x.id===id)?.precio||0;
+        return`${id}=${Math.round(precio)}`;
+      }).join(", ");
+      return`${r.zona}/${r.planId}: ${cats} | C/F=${r.bd.cfTotal.toFixed(1)}%`;
+    }).join("\n");
 
-CATEGORÍAS: s0_25=Socio 0-25, s26_34=Socio 26-35, s35_54=Socio 36-54, s55_59=Socio 55-59, s60plus=Socio 60+, h1=Hijo1, h2plus=Hijo2+
+    const sys=`Sos un motor de ajuste de precios para cotizaciones de medicina prepaga Omint.
 
-FORMATO (repetir por cada plan modificado):
-[una línea explicando qué hiciste]
-ZONA: [zona]
-PLAN: [plan]
+INSTRUCCIONES CRÍTICAS:
+1. Los precios que ves abajo son los precios ACTUALES de esta cotización. Calculá SIEMPRE desde estos valores.
+2. "subir X%" = precio_actual * (1 + X/100). "bajar X%" = precio_actual * (1 - X/100).
+3. Si modificás solo algunas categorías, las demás deben quedar con su precio actual SIN CAMBIOS.
+4. Nunca pongas 0 en ninguna categoría a menos que el usuario lo pida explícitamente.
+5. Respondé con un bloque por cada plan modificado. Sin explicaciones largas.
+
+CATEGORÍAS: s0_25=Socio 0-25, s26_34=Socio 26-35, s35_54=Socio 36-54, s55_59=Socio 55-59, s60plus=Socio 60+, h1=Hijo 1, h2plus=Hijo 2+
+
+FORMATO DE RESPUESTA (repetir por cada plan):
+Confirmación breve.
+ZONA: [zona exacta]
+PLAN: [plan exacto]
 \`\`\`json
-{"s0_25":0,"s26_34":0,"s35_54":0,"s55_59":0,"s60plus":0,"h1":0,"h2plus":0}
+{"s0_25":VALOR,"s26_34":VALOR,"s35_54":VALOR,"s55_59":VALOR,"s60plus":VALOR,"h1":VALOR,"h2plus":VALOR}
 \`\`\`
 
-PRECIOS ACTUALES:
-${results.map(r=>`${r.zona}/${r.planId} → s0_25=${r.bd.rows.find(x=>x.id==="s0_25")?.precio||0}, s26_34=${r.bd.rows.find(x=>x.id==="s26_34")?.precio||0}, s35_54=${r.bd.rows.find(x=>x.id==="s35_54")?.precio||0}, s55_59=${r.bd.rows.find(x=>x.id==="s55_59")?.precio||0}, s60plus=${r.bd.rows.find(x=>x.id==="s60plus")?.precio||0}, h1=${r.bd.rows.find(x=>x.id==="h1")?.precio||0}, h2plus=${r.bd.rows.find(x=>x.id==="h2plus")?.precio||0}, C/F=${r.bd.cfTotal.toFixed(1)}%`).join("\n")}
-TOTAL: fac=${fmt(grandFac)}, C/F=${grandCF.toFixed(1)}%
-Referencia C/F: ≤70% excelente, 70-82% aceptable, >82% alto`;
+PRECIOS ACTUALES DE ESTA COTIZACIÓN (usá estos como base para cualquier cálculo):
+${preciosActuales}
+TOTAL: fac=$${fmt(grandFac)}, C/F=${grandCF.toFixed(1)}% (≤70% excelente, 70-82% aceptable, >82% alto)
+Planes disponibles: ${[...new Set(results.map(r=>r.planId))].join(", ")}
+Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
+
     try{
-      const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:1200,messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]})});
+      // SIN historial — cada request es independiente para evitar confusión en cálculos
+      const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},
+        body:JSON.stringify({
+          model:"llama-3.3-70b-versatile",
+          max_tokens:1500,
+          temperature:0.1, // baja temperatura = más preciso en cálculos
+          messages:[
+            {role:"system",content:sys},
+            {role:"user",content:m}
+          ]
+        })
+      });
       const data=await res.json();
       const full=data.choices?.[0]?.message?.content||data.error?.message||"Error.";
-      // Parsear múltiples bloques ZONA/PLAN/JSON en la respuesta
-      const allMatches=[...full.matchAll(/ZONA:\s*(\S+)[\s\S]*?PLAN:\s*(\S+)[\s\S]*?```json([\s\S]*?)```/g)];
+
+      // Parsear todos los bloques ZONA/PLAN/JSON de la respuesta
+      const allMatches=[...full.matchAll(/ZONA:\s*(\S+)[\s\S]*?PLAN:\s*(\S+)[\s\S]*?```json\s*([\s\S]*?)```/g)];
       if(allMatches.length>0){
         allMatches.forEach(match=>{
           const zona=match[1].trim(),planId=match[2].trim();
           const ak=`${zona}||${planId}`;
           try{
             const jsonData=JSON.parse(match[3].trim());
-            // Usar precios actuales efectivos como base (no los vigentes)
-            const currentEffective=results.find(r=>r.adjKey===ak)?.bd.rows||[];
+            const currentRows=results.find(r=>r.adjKey===ak)?.bd.rows||[];
             const u={};
             CAT_IDS.forEach(id=>{
-              if(jsonData[id]!==undefined&&jsonData[id]!==null&&jsonData[id]!==0){
-                u[id]=parseFloat(jsonData[id])||0;
-              } else if(jsonData[id]===0){
-                // AI explícitamente puso 0 — ignorar, mantener precio actual
-                const cur=currentEffective.find(r=>r.id===id);
-                u[id]=cur?.precio||0;
+              const aiVal=jsonData[id];
+              const curPrecio=currentRows.find(r=>r.id===id)?.precio||0;
+              // Solo usar valor de la IA si es un número positivo válido
+              if(aiVal!==undefined&&aiVal!==null&&typeof aiVal==="number"&&aiVal>0){
+                u[id]=Math.round(aiVal);
               } else {
-                // Clave no incluida — mantener precio actual
-                const cur=currentEffective.find(r=>r.id===id);
-                u[id]=cur?.precio||0;
+                u[id]=Math.round(curPrecio);
               }
             });
             setAdjPrices(prev=>({...prev,[ak]:u}));
-          }catch{}
+          }catch(e){console.error("JSON parse error",e);}
         });
       }
       const expl=full.replace(/```json[\s\S]*?```/g,"").replace(/ZONA:\s*\S+/g,"").replace(/PLAN:\s*\S+/g,"").trim()||"✓ Precios actualizados";
