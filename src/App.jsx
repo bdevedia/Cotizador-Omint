@@ -793,7 +793,7 @@ PLAN: 4500_PYME
 {"s0_25":0,"s26_34":0,"s35_54":0,"s55_59":0,"s60plus":0,"h1":0,"h2plus":0}
 \`\`\``;
     try{
-      const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},body:JSON.stringify({model:"mistralai/mistral-7b-instruct:free",max_tokens:700,messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]})});
+      const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:700,messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]})});
       const data=await res.json();
       const full=data.choices?.[0]?.message?.content||data.error?.message||"Error.";
       const zm=full.match(/ZONA:\s*(\S+)/),pm=full.match(/PLAN:\s*(\S+)/),json=exJSON(full);
