@@ -126,23 +126,52 @@ function parseNominaFija(rawRows,rawCols){
     const plan=colPlan?String(row[colPlan]||"").trim():"";
     const zona=colZona?String(row[colZona]||"").trim():"";
     const nombre=colNombre?String(row[colNombre]||"").trim():"";
-    if(!familias[gid])familias[gid]={GRUPO:gid,NOMBRE:nombre,EDAD_TITULAR:null,EDAD_CONYUGE:0,HIJOS_MENORES_25:0,HIJOS_MAYORES_25:0,PLAN_ACTUAL:"",ZONA:zona};
+    if(!familias[gid])familias[gid]={GRUPO:gid,NOMBRE:nombre,EDAD_TITULAR:null,
+      CONYUGES:[],  // lista de TODAS las edades de conyuges
+      HIJOS_MENORES_25:0,HIJOS_MAYORES_25:0,PLAN_ACTUAL:"",ZONA:zona};
     if(tipo==="T"){
       if(edad!==null)familias[gid].EDAD_TITULAR=edad;
       if(plan)familias[gid].PLAN_ACTUAL=plan;
       if(zona)familias[gid].ZONA=zona;
       if(nombre&&nombre!=="-")familias[gid].NOMBRE=nombre;
     }else if(tipo==="C"){
-      if(edad!==null)familias[gid].EDAD_CONYUGE=edad;
+      // Guardar TODOS los conyuges (puede haber duplicados en el archivo)
+      if(edad!==null)familias[gid].CONYUGES.push(edad);
     }else if(tipo==="H"){
       if(edad!==null){
-        if(edad<25)familias[gid].HIJOS_MENORES_25++;
+        if(edad<=25)familias[gid].HIJOS_MENORES_25++;  // FIX: <= en lugar de <
         else familias[gid].HIJOS_MAYORES_25++;
       }
     }
   });
 
-  const rows=Object.values(familias).filter(f=>f.EDAD_TITULAR!==null);
+  // Convertir a filas: 1 fila por familia principal + 1 fila extra por cada conyuge adicional
+  const rows=[];
+  Object.values(familias).forEach(f=>{
+    if(f.EDAD_TITULAR===null)return;
+    const primerConyuge=f.CONYUGES.length>0?f.CONYUGES[0]:0;
+    // Fila principal con titular + primer conyuge + hijos
+    rows.push({
+      GRUPO:f.GRUPO,NOMBRE:f.NOMBRE,
+      EDAD_TITULAR:f.EDAD_TITULAR,
+      EDAD_CONYUGE:primerConyuge,
+      HIJOS_MENORES_25:f.HIJOS_MENORES_25,
+      HIJOS_MAYORES_25:f.HIJOS_MAYORES_25,
+      PLAN_ACTUAL:f.PLAN_ACTUAL,ZONA:f.ZONA,
+    });
+    // Filas extras para conyuges adicionales (sin hijos, para no duplicar H1/H2)
+    f.CONYUGES.slice(1).forEach(edadCon=>{
+      rows.push({
+        GRUPO:f.GRUPO+"_con",NOMBRE:"",
+        EDAD_TITULAR:edadCon,  // el conyuge extra se trata como titular extra
+        EDAD_CONYUGE:0,
+        HIJOS_MENORES_25:0,
+        HIJOS_MAYORES_25:0,
+        PLAN_ACTUAL:f.PLAN_ACTUAL,ZONA:f.ZONA,
+      });
+    });
+  });
+
   if(rows.length===0)return{error:"No se encontraron titulares con edad válida. Revisá el template."};
   return{rows,filasIgnoradas,totalRaw:rawRows.length};
 }
