@@ -807,18 +807,39 @@ ${results.map(r=>`${r.zona}/${r.planId} → s0_25=${r.bd.rows.find(x=>x.id==="s0
 TOTAL: fac=${fmt(grandFac)}, C/F=${grandCF.toFixed(1)}%
 Referencia C/F: ≤70% excelente, 70-82% aceptable, >82% alto`;
     try{
-      const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:700,messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]})});
+      const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},body:JSON.stringify({model:"llama-3.3-70b-versatile",max_tokens:1200,messages:[{role:"system",content:sys},...hist.map(x=>({role:x.role,content:x.content}))]})});
       const data=await res.json();
       const full=data.choices?.[0]?.message?.content||data.error?.message||"Error.";
-      const zm=full.match(/ZONA:\s*(\S+)/),pm=full.match(/PLAN:\s*(\S+)/),json=exJSON(full);
-      const expl=stripJ(full.replace(/ZONA:\s*\S+/,"").replace(/PLAN:\s*\S+/,""))||full;
-      if(json&&zm&&pm){
-        const ak=`${zm[1].trim()}||${pm[1].trim()}`;
-        const base=precios?.[zm[1].trim()]?.[pm[1].trim()]||{};
-        const u={};CAT_IDS.forEach(c=>{u[c]=json[c]!==undefined?parseFloat(json[c])||0:base[c]||0;});
-        setAdjPrices(prev=>({...prev,[ak]:u}));
+      // Parsear múltiples bloques ZONA/PLAN/JSON en la respuesta
+      const allMatches=[...full.matchAll(/ZONA:\s*(\S+)[\s\S]*?PLAN:\s*(\S+)[\s\S]*?```json([\s\S]*?)```/g)];
+      if(allMatches.length>0){
+        allMatches.forEach(match=>{
+          const zona=match[1].trim(),planId=match[2].trim();
+          const ak=`${zona}||${planId}`;
+          try{
+            const jsonData=JSON.parse(match[3].trim());
+            // Usar precios actuales efectivos como base (no los vigentes)
+            const currentEffective=results.find(r=>r.adjKey===ak)?.bd.rows||[];
+            const u={};
+            CAT_IDS.forEach(id=>{
+              if(jsonData[id]!==undefined&&jsonData[id]!==null&&jsonData[id]!==0){
+                u[id]=parseFloat(jsonData[id])||0;
+              } else if(jsonData[id]===0){
+                // AI explícitamente puso 0 — ignorar, mantener precio actual
+                const cur=currentEffective.find(r=>r.id===id);
+                u[id]=cur?.precio||0;
+              } else {
+                // Clave no incluida — mantener precio actual
+                const cur=currentEffective.find(r=>r.id===id);
+                u[id]=cur?.precio||0;
+              }
+            });
+            setAdjPrices(prev=>({...prev,[ak]:u}));
+          }catch{}
+        });
       }
-      setChat([...hist,{role:"assistant",content:expl,upd:!!(json&&zm&&pm)}]);
+      const expl=full.replace(/```json[\s\S]*?```/g,"").replace(/ZONA:\s*\S+/g,"").replace(/PLAN:\s*\S+/g,"").trim()||"✓ Precios actualizados";
+      setChat([...hist,{role:"assistant",content:expl,upd:allMatches.length>0}]);
     }catch(err){setChat([...hist,{role:"assistant",content:"Error: "+err.message}]);}
     setCL(false);
   }
@@ -985,6 +1006,7 @@ Referencia C/F: ≤70% excelente, 70-82% aceptable, >82% alto`;
             <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios · banda 200-499</span>
             {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
             <span style={{marginLeft:"auto",...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
+            {(adjPrices[r.adjKey]||adjCostos[r.adjKey])&&<button onClick={()=>{setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjCostos(prev=>{const n={...prev};delete n[r.adjKey];return n;});}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid #DC2626`,background:"#FEF2F2",color:"#DC2626",cursor:"pointer",fontFamily:FONT,fontWeight:500}}>↺ Restaurar</button>}
           </div>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:660}}>
@@ -1000,8 +1022,8 @@ Referencia C/F: ≤70% excelente, 70-82% aceptable, >82% alto`;
                   return(<tr key={row.id} style={{opacity:row.count===0?0.3:1}}>
                     <td style={TD({fontWeight:500})}>{row.label}</td>
                     <td style={TD({textAlign:"right",color:"#6B7280"})}>{row.count}</td>
-                    <td style={TD({textAlign:"right"})}><input type="number" min={0} value={row.precio} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjPrices(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={numInp(88,hadjP)}/></td>
-                    <td style={TD({textAlign:"right"})}><input type="number" min={0} value={row.costo} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjCostos(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={numInp(88,hadjC)}/></td>
+                    <td style={TD({textAlign:"right"})}><div style={{display:"flex",alignItems:"center",gap:2,justifyContent:"flex-end"}}><span style={{fontSize:11,color:hadjP?BLUE:"#6B7280",fontFamily:FONT}}>$</span><input type="number" min={0} value={row.precio} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjPrices(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={{...numInp(80,hadjP),textAlign:"right"}}/></div></td>
+                    <td style={TD({textAlign:"right"})}><div style={{display:"flex",alignItems:"center",gap:2,justifyContent:"flex-end"}}><span style={{fontSize:11,color:hadjC?"#7C3AED":"#6B7280",fontFamily:FONT}}>$</span><input type="number" min={0} value={row.costo} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjCostos(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={{...numInp(80,hadjC),textAlign:"right"}}/></div></td>
                     <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(row.fac)}</td>
                     <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(row.cos)}</td>
                     <td style={TD({textAlign:"right"})}>{row.fac>0&&<span style={{...badge(cfColor(row.cf),cfBg(row.cf)),minWidth:44,display:"inline-block",textAlign:"center",fontSize:11}}>{row.cf.toFixed(0)}%</span>}</td>
@@ -1017,6 +1039,39 @@ Referencia C/F: ≤70% excelente, 70-82% aceptable, >82% alto`;
               </tbody>
             </table>
           </div>
+          {/* Comparación con precios vigentes */}
+          {adjPrices[r.adjKey]&&(()=>{
+            const base=precios?.[r.zona]?.[r.planId]||{};
+            const hasChanges=CAT_IDS.some(id=>adjPrices[r.adjKey]?.[id]!==undefined&&Math.round(adjPrices[r.adjKey][id])!==Math.round(base[id]||0));
+            if(!hasChanges)return null;
+            return(<div style={{marginTop:"1rem",padding:"12px 14px",background:"#F8FAFF",border:`1px solid ${BORDER}`,borderRadius:8}}>
+              <p style={{fontSize:11,fontWeight:600,color:"#6B7280",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Comparación con precios vigentes</p>
+              <div style={{overflowX:"auto"}}>
+                <table style={{borderCollapse:"collapse",fontSize:12,width:"100%"}}>
+                  <thead><tr>
+                    <th style={TH({textAlign:"left",fontSize:10})}>Categoría</th>
+                    <th style={TH({fontSize:10})}>Vigente</th>
+                    <th style={TH({fontSize:10})}>Cotización</th>
+                    <th style={TH({fontSize:10})}>Diferencia</th>
+                  </tr></thead>
+                  <tbody>{CATS.map(cat=>{
+                    const vigente=base[cat.id]||0;
+                    const cotiz=adjPrices[r.adjKey]?.[cat.id]??vigente;
+                    if(vigente===0&&cotiz===0)return null;
+                    const diff=cotiz-vigente;
+                    const pct=vigente>0?((cotiz-vigente)/vigente*100):0;
+                    const changed=Math.round(cotiz)!==Math.round(vigente);
+                    return(<tr key={cat.id} style={{background:changed?"#FFF7ED":"transparent"}}>
+                      <td style={TD({fontWeight:changed?600:400,fontSize:12})}>{cat.label}</td>
+                      <td style={TD({textAlign:"right",fontSize:12,color:"#6B7280"})}>$ {Math.round(vigente).toLocaleString("es-AR")}</td>
+                      <td style={TD({textAlign:"right",fontSize:12,fontWeight:changed?600:400,color:changed?(diff>0?"#16A34A":"#DC2626"):"#111827"})}>$ {Math.round(cotiz).toLocaleString("es-AR")}</td>
+                      <td style={TD({textAlign:"right",fontSize:12})}>{changed?<span style={{color:diff>0?"#16A34A":"#DC2626",fontWeight:600}}>{diff>0?"+":""}{pct.toFixed(1)}%</span>:<span style={{color:"#9CA3AF"}}>—</span>}</td>
+                    </tr>);
+                  })}</tbody>
+                </table>
+              </div>
+            </div>);
+          })()}
         </div>);
       })}
       {results.length===0&&(<div style={{...card(),textAlign:"center",padding:"3rem",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay empleados mapeados a ningún plan Omint.</p></div>)}
