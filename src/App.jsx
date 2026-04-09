@@ -1028,8 +1028,8 @@ export default function App(){
       setQuotes(lsGet("omint-quotes",[]));setApiKey(lsGet("omint-apikey",""));
       setLoaded(true);
       // Suscribir actualizaciones en tiempo real
-      dbSubscribe("precios",v=>{if(v)setPrecios(v);});
-      dbSubscribe("costos",v=>{if(v)setCostos(v);});
+      dbSubscribe("precios",v=>{setPrecios(v||{});});
+      dbSubscribe("costos",v=>{setCostos(v||{});});
     })();
   },[]);
 
