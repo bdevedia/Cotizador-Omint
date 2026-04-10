@@ -674,7 +674,7 @@ function ExportModal({results,empresa,empsRef,onClose}){
           </div>
           <div style={{display:"flex",gap:10,marginTop:"0.5rem"}}>
             <button onClick={exportPDF} style={{...btnP,flex:1}}>📄 Exportar PDF</button>
-            <button onClick={()=>{exportAnalisisXLS(results,cfg.empresa,empsRef);onClose();}} style={{...btnS,flex:1}}>📊 Exportar Excel análisis</button>
+            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel análisis</button>
           </div>
           <p style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT,textAlign:"center"}}>El PDF se abre en una nueva pestaña → usá Ctrl+P o Cmd+P para guardar como PDF</p>
         </div>
@@ -961,6 +961,7 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
           setEmps(null);return;
         }
         // Éxito — cargar con mapeo fijo (sin paso de configuración)
+        if(result.rows.length===0){setNomErrors([{tipo:"error",msg:"El archivo no tiene filas de datos. Revisá que tenga al menos una fila de empleados."}]);setEmps(null);return;}
         setEmps(result.rows);
         setCols(Object.keys(result.rows[0]));
         setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
@@ -1033,6 +1034,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
 
       // Parsear todos los bloques ZONA/PLAN/JSON de la respuesta
       const allMatches=[...full.matchAll(/ZONA:\s*(\S+)[\s\S]*?PLAN:\s*(\S+)[\s\S]*?```json\s*([\s\S]*?)```/g)];
+      let updCount=0;
       if(allMatches.length>0){
         allMatches.forEach(match=>{
           const zona=match[1].trim(),planId=match[2].trim();
@@ -1052,14 +1054,15 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
               }
             });
             setAdjPrices(prev=>({...prev,[ak]:u}));
+            updCount++;
           }catch(e){console.error("JSON parse error",e);}
         });
       }
       const expl=full.replace(/```json[\s\S]*?```/g,"").replace(/ZONA:\s*\S+/g,"").replace(/PLAN:\s*\S+/g,"").trim()||"✓ Precios actualizados";
-      if(allMatches.length>0){
+      if(updCount>0){
         setAiLog(prev=>[...prev,{ts:new Date().toLocaleTimeString("es-AR"),pedido:m,resultado:expl,planes:allMatches.map(x=>x[2]).join(", ")}]);
       }
-      setChat([...hist,{role:"assistant",content:expl,upd:allMatches.length>0}]);
+      setChat([...hist,{role:"assistant",content:expl,upd:updCount>0}]);
     }catch(err){setChat([...hist,{role:"assistant",content:"Error: "+err.message}]);}
     setCL(false);
   }
@@ -1256,7 +1259,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           {Object.keys(scenarios).map(name=>(
             <button key={name} onClick={()=>{setAdjPrices(scenarios[name].adjPrices);setAdjCostos(scenarios[name].adjCostos);}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px solid ${BLUE}`,background:"#fff",color:BLUE,cursor:"pointer",fontFamily:FONT}}>{name}</button>
           ))}
-          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&(<button onClick={()=>{const name=prompt("Nombre del escenario:");if(name?.trim())setScenarios(p=>({...p,[name.trim()]:{adjPrices:{...adjPrices},adjCostos:{...adjCostos}}}));}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px dashed #9CA3AF`,background:"#fff",color:"#374151",cursor:"pointer",fontFamily:FONT}}>+ Guardar escenario</button>)}
+          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&(<button onClick={()=>{const name=prompt("Nombre del escenario:");if(name?.trim()){const k=name.trim();if(scenarios[k]&&!confirm(`Ya existe el escenario "${k}". ¿Sobreescribir?`))return;setScenarios(p=>({...p,[k]:{adjPrices:{...adjPrices},adjCostos:{...adjCostos}}}));}}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px dashed #9CA3AF`,background:"#fff",color:"#374151",cursor:"pointer",fontFamily:FONT}}>+ Guardar escenario</button>)}
           {Object.keys(scenarios).length===0&&Object.keys(adjPrices).length===0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>Ajustá precios y guardá como escenario para comparar</span>}
         </div>
       </div>
@@ -1403,8 +1406,8 @@ export default function App(){
     })();
   },[]);
 
-  async function savePre(p){setPrecios(p);lsSet("omint-precios",p);setSyncStatus("syncing");try{await dbSet("precios",p);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch{setSyncStatus("error");}}
-  async function saveCos(c){setCostos(c);lsSet("omint-costos",c);setSyncStatus("syncing");try{await dbSet("costos",c);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch{setSyncStatus("error");}}
+  async function savePre(p){setPrecios(p);lsSet("omint-precios",p);setSyncStatus("syncing");try{await dbSet("precios",p);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error (precios):",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
+  async function saveCos(c){setCostos(c);lsSet("omint-costos",c);setSyncStatus("syncing");try{await dbSet("costos",c);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error (costos):",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
   function saveQuote(q){const nq=[q,...quotes];setQuotes(nq);lsSet("omint-quotes",nq);}
   function updQuote(id,upd){const nq=quotes.map(q=>q.id===id?{...q,...upd}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
   function saveApiKey(k){setApiKey(k);lsSet("omint-apikey",k);}
