@@ -1511,39 +1511,81 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
 
       {/* OSDE Comparison Toggle */}
       <div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:compareOsde?10:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:compareOsde?12:0}}>
           <button onClick={()=>setCompareOsde(v=>!v)} style={{...compareOsde?btnP:btnS,fontSize:12,padding:"6px 14px",background:compareOsde?"#7C3AED":"#fff",color:compareOsde?"#fff":"#7C3AED",border:"1.5px solid #7C3AED"}}>
             {compareOsde?"✓ Comparando con OSDE":"Comparar con OSDE"}
           </button>
         </div>
         {compareOsde&&(Object.keys(osde||{}).length===0
           ?<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>No hay planes OSDE cargados. Cargalos en "Precios OSDE".</span>
-          :<div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {results.length===0&&<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>Cargá una nómina y configurá los planes para ver la comparación.</span>}
-            {results.map(r=>{
+          :results.length===0
+            ?<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>Cargá una nómina y configurá los planes para ver la comparación.</span>
+            :(()=>{
               const osdePlans=Object.keys(osde||{}).sort();
-              const mappedPlan=planMappingOsde[r.adjKey]||"";
-              const osdeResult=mappedPlan&&(osde||{})[mappedPlan]?calcOsdeFromEmps(r.empList,(osde||{})[mappedPlan]):null;
-              return(<div key={r.adjKey} style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <span style={{...badge(ZONA_COLORS[r.zona]?.c||BLUE,ZONA_COLORS[r.zona]?.bg||BLUE_LT),fontSize:11,minWidth:64}}>{r.zona}</span>
-                <span style={{fontSize:12,color:BLUE,fontFamily:FONT,fontWeight:600,minWidth:90}}>{r.planId}</span>
-                <span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>→</span>
-                <select value={mappedPlan} onChange={e=>setPlanMappingOsde(p=>({...p,[r.adjKey]:e.target.value}))} style={{...inp,width:160,fontSize:12,padding:"6px 10px"}}>
-                  <option value="">No comparar</option>
-                  {osdePlans.map(p=><option key={p} value={p}>{p}</option>)}
-                </select>
-                {osdeResult&&(<>
-                  <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:"6px 12px"}}>
-                    <span style={{fontSize:12,color:"#7C3AED",fontWeight:700,fontFamily:FONT}}>OSDE {mappedPlan}: ${fmt(osdeResult.total)}</span>
-                  </div>
-                  {r.bd.totalFac>0&&<span style={{fontSize:12,fontWeight:700,fontFamily:FONT,color:osdeResult.total>r.bd.totalFac?"#DC2626":"#16A34A"}}>
-                    {osdeResult.total>r.bd.totalFac?"+":""}{(((osdeResult.total-r.bd.totalFac)/r.bd.totalFac)*100).toFixed(1)}%
-                    {" "}<span style={{fontWeight:400,color:"#6B7280"}}>{osdeResult.total>r.bd.totalFac?"(OSDE más caro)":"(OSDE más barato)"}</span>
-                  </span>}
-                </>)}
+              const rows=results.map(r=>{
+                const mappedPlan=planMappingOsde[r.adjKey]||"";
+                const osdeResult=mappedPlan&&(osde||{})[mappedPlan]?calcOsdeFromEmps(r.empList,(osde||{})[mappedPlan]):null;
+                return{r,mappedPlan,osdeResult};
+              });
+              const totalOmint=rows.reduce((a,{r})=>a+r.bd.totalFac,0);
+              const totalOsde=rows.reduce((a,{osdeResult})=>a+(osdeResult?osdeResult.total:0),0);
+              const hasSomeOsde=rows.some(x=>x.osdeResult);
+              const diffTotal=totalOsde-totalOmint;
+              const diffPctTotal=totalOmint>0?diffTotal/totalOmint*100:0;
+              return(<div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:560}}>
+                  <thead><tr>
+                    <th style={TH({textAlign:"left"})}>Plan Omint</th>
+                    <th style={TH({textAlign:"left",color:"#7C3AED"})}>Plan OSDE</th>
+                    <th style={TH()}>Total Omint</th>
+                    <th style={TH({color:"#7C3AED"})}>Total OSDE</th>
+                    <th style={TH()}>Diferencia</th>
+                    <th style={TH()}>%</th>
+                  </tr></thead>
+                  <tbody>
+                    {rows.map(({r,mappedPlan,osdeResult})=>{
+                      const diff=osdeResult?osdeResult.total-r.bd.totalFac:null;
+                      const pct=diff!==null&&r.bd.totalFac>0?diff/r.bd.totalFac*100:null;
+                      const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
+                      return(<tr key={r.adjKey}>
+                        <td style={TD({fontWeight:600})}>
+                          <span style={{...badge(zc2.c,zc2.bg),fontSize:10,marginRight:6}}>{r.zona}</span>{r.planId}
+                        </td>
+                        <td style={TD()}>
+                          <select value={mappedPlan} onChange={e=>setPlanMappingOsde(p=>({...p,[r.adjKey]:e.target.value}))} style={{...inp,width:130,fontSize:12,padding:"4px 8px"}}>
+                            <option value="">—</option>
+                            {osdePlans.map(p=><option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </td>
+                        <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(r.bd.totalFac)}</td>
+                        <td style={TD({textAlign:"right",fontWeight:600,color:"#7C3AED"})}>{osdeResult?`$${fmt(osdeResult.total)}`:"—"}</td>
+                        <td style={TD({textAlign:"right",color:diff===null?"#9CA3AF":diff>0?"#DC2626":"#16A34A",fontWeight:diff!==null?600:400})}>
+                          {diff!==null?`${diff>0?"+":""}$${fmt(Math.abs(diff))}`:"—"}
+                        </td>
+                        <td style={TD({textAlign:"right"})}>
+                          {pct!==null&&<span style={{...badge(pct>0?"#DC2626":"#16A34A",pct>0?"#FEF2F2":"#D1FAE5"),fontSize:11}}>
+                            {pct>0?"+":""}{pct.toFixed(1)}%
+                          </span>}
+                        </td>
+                      </tr>);
+                    })}
+                    {hasSomeOsde&&(<tr style={{background:"#F5F3FF",borderTop:`2px solid #7C3AED`}}>
+                      <td style={{padding:"10px 12px",fontWeight:700,color:"#7C3AED",fontFamily:FONT}} colSpan={2}>TOTAL</td>
+                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:BLUE,fontFamily:FONT}}>${fmt(totalOmint)}</td>
+                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"#7C3AED",fontFamily:FONT}}>${fmt(totalOsde)}</td>
+                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:diffTotal>0?"#DC2626":"#16A34A",fontFamily:FONT}}>
+                        {diffTotal>0?"+":""}${fmt(Math.abs(diffTotal))}
+                      </td>
+                      <td style={{padding:"10px 12px",textAlign:"right",fontFamily:FONT}}>
+                        <span style={{...badge(diffPctTotal>0?"#DC2626":"#16A34A",diffPctTotal>0?"#FEF2F2":"#D1FAE5"),fontWeight:700}}>
+                          {diffPctTotal>0?"+":""}{diffPctTotal.toFixed(1)}%
+                        </span>
+                      </td>
+                    </tr>)}
+                  </tbody>
+                </table>
               </div>);
-            })}
-          </div>
+            })()
         )}
       </div>
 
