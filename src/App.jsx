@@ -25,6 +25,17 @@ const EMPTY_CATS=Object.fromEntries(CAT_IDS.map(k=>[k,0]));
 
 const ZONA_IDS=["AMBA","Córdoba","Mendoza"];
 const ZONA_COLORS={AMBA:{c:"#1B2A7B",bg:"#EEF1FB"},Córdoba:{c:"#92400E",bg:"#FEF3C7"},Mendoza:{c:"#065F46",bg:"#D1FAE5"}};
+const OSDE_CATS=[
+  {id:"ind_neo",   label:"Individual NEO (<28 años)"},
+  {id:"ind_joven", label:"Individual Joven (28-35)"},
+  {id:"ind_mayor", label:"Individual (+35)"},
+  {id:"mat_neo",   label:"Matrimonio NEO (<28 años)"},
+  {id:"mat_joven", label:"Matrimonio Joven (28-35)"},
+  {id:"mat_mayor", label:"Matrimonio (+35)"},
+  {id:"hijo1",     label:"1er Hijo (<28 años)"},
+  {id:"hijo2plus", label:"2do Hijo o más (<28 años)"},
+];
+const EMPTY_OSDE=Object.fromEntries(OSDE_CATS.map(c=>[c.id,0]));
 const BANDA="200-499"; // siempre fijo
 const PRECIO_COLS=[1,2,3,4,5,7,8]; // columnas en el XLS de precios
 
@@ -145,12 +156,17 @@ function parseNominaFija(rawRows,rawCols){
     }
   });
 
-  // Convertir a filas: 1 fila por familia principal + 1 fila extra por cada conyuge adicional
+  // Convertir a filas: 1 fila por familia, solo el primer cónyuge
   const rows=[];
+  const conyugesMultiples=[];
   Object.values(familias).forEach(f=>{
     if(f.EDAD_TITULAR===null)return;
     const primerConyuge=f.CONYUGES.length>0?f.CONYUGES[0]:0;
-    // Fila principal con titular + primer conyuge + hijos
+    // Si hay más de 1 cónyuge, registrar advertencia e ignorar extras
+    if(f.CONYUGES.length>1){
+      conyugesMultiples.push({familia:f.GRUPO,count:f.CONYUGES.length});
+      filasIgnoradas+=(f.CONYUGES.length-1);
+    }
     rows.push({
       GRUPO:f.GRUPO,NOMBRE:f.NOMBRE,
       EDAD_TITULAR:f.EDAD_TITULAR,
@@ -159,21 +175,10 @@ function parseNominaFija(rawRows,rawCols){
       HIJOS_MAYORES_25:f.HIJOS_MAYORES_25,
       PLAN_ACTUAL:f.PLAN_ACTUAL,ZONA:f.ZONA,
     });
-    // Filas extras para conyuges adicionales (sin hijos, para no duplicar H1/H2)
-    f.CONYUGES.slice(1).forEach(edadCon=>{
-      rows.push({
-        GRUPO:f.GRUPO+"_con",NOMBRE:"",
-        EDAD_TITULAR:edadCon,  // el conyuge extra se trata como titular extra
-        EDAD_CONYUGE:0,
-        HIJOS_MENORES_25:0,
-        HIJOS_MAYORES_25:0,
-        PLAN_ACTUAL:f.PLAN_ACTUAL,ZONA:f.ZONA,
-      });
-    });
   });
 
   if(rows.length===0)return{error:"No se encontraron titulares con edad válida. Revisá el template."};
-  return{rows,filasIgnoradas,totalRaw:rawRows.length};
+  return{rows,filasIgnoradas,conyugesMultiples,totalRaw:rawRows.length};
 }
 
 // ── PARSERS ───────────────────────────────────────────────────────────────────
@@ -256,6 +261,26 @@ function calcBD(emps,map,prices,costos){
   });
   const tf=rows.reduce((a,r)=>a+r.fac,0),tc=rows.reduce((a,r)=>a+r.cos,0);
   return{rows,totalFac:tf,totalCosto:tc,cfTotal:tf>0?tc/tf*100:0,totalSocios:emps.length};
+}
+
+// ── OSDE COMPARISON ───────────────────────────────────────────────────────────
+function calcOsdeFromEmps(emps,osdePrices){
+  const counts={...EMPTY_OSDE};
+  (emps||[]).forEach(row=>{
+    const edadTit=parseInt(row.EDAD_TITULAR)||0;
+    const edadCon=parseInt(row.EDAD_CONYUGE)||0;
+    const hasSpouse=edadCon>0;
+    const hijMen=parseInt(row.HIJOS_MENORES_25)||0;
+    const hijMay=parseInt(row.HIJOS_MAYORES_25)||0;
+    const prefix=hasSpouse?"mat":"ind";
+    const suffix=edadTit<28?"neo":edadTit<=35?"joven":"mayor";
+    counts[`${prefix}_${suffix}`]++;
+    if(hijMen>=1)counts.hijo1++;
+    if(hijMen>=2)counts.hijo2plus+=(hijMen-1);
+    counts.ind_mayor+=hijMay;
+  });
+  const total=OSDE_CATS.reduce((sum,cat)=>sum+counts[cat.id]*(osdePrices[cat.id]||0),0);
+  return{counts,total};
 }
 
 // ── DETECCIÓN INVERSIÓN DE PRECIOS ────────────────────────────────────────────
@@ -422,7 +447,7 @@ function generateProposalHTML(cfg,results){
 
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
-function exportAnalisisXLS(results,empresa,emps){
+function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,osdePlan){
   const today=new Date().toLocaleDateString("es-AR");
   const mes=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date().getMonth()];
   const vigencia=`${mes.charAt(0).toUpperCase()+mes.slice(1)} ${new Date().getFullYear()}`;
@@ -570,9 +595,46 @@ function exportAnalisisXLS(results,empresa,emps){
     const fmt=ci===3||ci===4?MONEY:ci===5?PCT:null;
     cfWs[XLSX.utils.encode_cell({c:ci,r:cr})]=sc(v,BOLD_C,fmt);
   });cr++;
+  if(brokerPct&&parseFloat(brokerPct)>0){
+    cr++;
+    cfWs[XLSX.utils.encode_cell({c:0,r:cr})]=sc(`Comisión broker: ${brokerPct}% (incluida en los costos mostrados)`,L);cr++;
+  }
   cfWs["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:6,r:cr}});
   cfWs["!cols"]=[{wch:14},{wch:10},{wch:8},{wch:16},{wch:16},{wch:8},{wch:12}];
   XLSX.utils.book_append_sheet(wb,cfWs,"Análisis CF");
+
+  // OSDE comparison sheet
+  if(osde&&osdePlan&&osde[osdePlan]&&emps){
+    const osdeResult=calcOsdeFromEmps(emps,osde[osdePlan]);
+    const osWs={};let or=0;
+    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc(`Comparación Omint vs OSDE ${osdePlan}`,BOLD_C);or++;or++;
+    ["Categoría","Cantidad","Precio OSDE","Subtotal"].forEach((h,ci)=>{osWs[XLSX.utils.encode_cell({c:ci,r:or})]=sc(h,BOLD_C);});or++;
+    OSDE_CATS.forEach(cat=>{
+      const qty=osdeResult.counts[cat.id]||0;
+      const price=osde[osdePlan][cat.id]||0;
+      const sub=qty*price;
+      [cat.label,qty,price,sub].forEach((v,ci)=>{
+        const fmt=ci===2||ci===3?MONEY:null;
+        osWs[XLSX.utils.encode_cell({c:ci,r:or})]=sc(v,ci===0?L:C,fmt);
+      });or++;
+    });
+    or++;
+    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Total OSDE facturación",BOLD_C);
+    osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+osdeResult.total.toFixed(2),BOLD_C,MONEY);or++;
+    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Total Omint facturación",BOLD_C);
+    osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+totalFac.toFixed(2),BOLD_C,MONEY);or++;
+    const diff=osdeResult.total-totalFac;
+    const diffPct=totalFac>0?diff/totalFac:0;
+    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Diferencia ($)",BOLD_C);
+    osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+diff.toFixed(2),BOLD_C,MONEY);or++;
+    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Diferencia (%)",BOLD_C);
+    osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+diffPct.toFixed(4),BOLD_C,"0.00%");or++;
+    or++;
+    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Nota: Los hijos mayores de 25 años son tratados como Individual (+35) en OSDE.",L);or++;
+    osWs["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:3,r:or}});
+    osWs["!cols"]=[{wch:30},{wch:10},{wch:14},{wch:16}];
+    XLSX.utils.book_append_sheet(wb,osWs,"Comparación OSDE");
+  }
 
   XLSX.writeFile(wb,`Analisis_${empresa||"empresa"}_${today.replace(/\//g,"-")}.xlsx`);
 }
@@ -606,7 +668,7 @@ function downloadTemplate(){
 }
 
 // ── MODAL EXPORTAR ────────────────────────────────────────────────────────────
-function ExportModal({results,empresa,empsRef,onClose}){
+function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,osdePlan}){
   const [cfg,setCfg]=useState({
     empresa:empresa||"",
     fecha:new Date().toISOString().split("T")[0],
@@ -674,7 +736,7 @@ function ExportModal({results,empresa,empsRef,onClose}){
           </div>
           <div style={{display:"flex",gap:10,marginTop:"0.5rem"}}>
             <button onClick={exportPDF} style={{...btnP,flex:1}}>📄 Exportar PDF</button>
-            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel análisis</button>
+            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef,brokerPct,osde,osdePlan);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel análisis</button>
           </div>
           <p style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT,textAlign:"center"}}>El PDF se abre en una nueva pestaña → usá Ctrl+P o Cmd+P para guardar como PDF</p>
         </div>
@@ -858,6 +920,57 @@ function Historial({quotes,onUpdate}){
   </div>);
 }
 
+// ── OSDE VIGENTES ─────────────────────────────────────────────────────────────
+function OsdeVigentes({osde,onSave}){
+  const plans=Object.keys(osde||{}).sort();
+  const [plan,setPlan]=useState(plans[0]||null);
+  const [newPlan,setNewPlan]=useState("");
+  const [loc,setLoc]=useState({...EMPTY_OSDE});
+  const [ok,setOk]=useState(false);
+  const selPlan=plans.includes(plan)?plan:(plans[0]||null);
+  useEffect(()=>{if(selPlan)setLoc({...EMPTY_OSDE,...(osde[selPlan]||{})});},[selPlan,osde]);
+  function save(){
+    if(!selPlan)return;
+    const nxt={...(osde||{})};nxt[selPlan]={...loc};onSave(nxt);
+    setOk(true);setTimeout(()=>setOk(false),2500);
+  }
+  function addPlan(){
+    const n=newPlan.trim();if(!n)return;
+    const nxt={...(osde||{}),[n]:{...EMPTY_OSDE}};onSave(nxt);setPlan(n);setNewPlan("");
+  }
+  function deletePlan(){
+    if(!selPlan||!confirm(`¿Eliminar plan OSDE "${selPlan}"?`))return;
+    const nxt={...(osde||{})};delete nxt[selPlan];onSave(nxt);setPlan(Object.keys(nxt)[0]||null);
+  }
+  return(<div>
+    <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Precios OSDE</h2>
+    <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Precios de referencia de OSDE para comparación en el análisis.</p>
+    <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+      {plans.map(p=>(<button key={p} onClick={()=>setPlan(p)} style={{...btnP,background:p===selPlan?"#7C3AED":"#fff",color:p===selPlan?"#fff":"#7C3AED",border:"1.5px solid #7C3AED",fontSize:12}}>{p}</button>))}
+      <div style={{display:"flex",gap:6}}>
+        <input value={newPlan} onChange={e=>setNewPlan(e.target.value)} placeholder="Nombre del plan (ej: 210)" style={{...inp,width:140,fontSize:12}}/>
+        <button onClick={addPlan} style={{...btnP,background:"#7C3AED",fontSize:12,padding:"6px 12px"}}>+ Agregar</button>
+      </div>
+      {selPlan&&<button onClick={deletePlan} style={{...btnP,background:"#fff",color:"#DC2626",border:"1px solid #FCA5A5",fontSize:12}}>🗑 Eliminar</button>}
+    </div>
+    {selPlan?(<div style={card()}>
+      <p style={{fontSize:13,fontWeight:600,color:"#7C3AED",marginBottom:12,fontFamily:FONT}}>Plan: {selPlan}</p>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <tbody>{OSDE_CATS.map(cat=>(<tr key={cat.id}>
+          <td style={{...TD(),color:"#374151",fontWeight:500}}>{cat.label}</td>
+          <td style={{...TD(),textAlign:"right",width:130}}>
+            <input type="number" value={loc[cat.id]||""} onChange={e=>setLoc(p=>({...p,[cat.id]:parseFloat(e.target.value)||0}))} style={numInp(120)} placeholder="0"/>
+          </td>
+        </tr>))}</tbody>
+      </table>
+      <div style={{display:"flex",gap:10,marginTop:12}}>
+        <button onClick={save} style={btnP}>Guardar</button>
+        {ok&&<span style={{fontSize:12,color:"#16A34A",alignSelf:"center",fontFamily:FONT}}>✓ Guardado</span>}
+      </div>
+    </div>):(<div style={{...card(),color:"#6B7280",fontSize:13,fontFamily:FONT}}>Agregá un plan OSDE para comenzar.</div>)}
+  </div>);
+}
+
 // ── CONFIGURACIÓN ─────────────────────────────────────────────────────────────
 function Configuracion({apiKey,onSave}){
   const [k,setK]=useState(apiKey||"");const[ok,setOk]=useState(false);
@@ -873,12 +986,13 @@ function Configuracion({apiKey,onSave}){
 }
 
 // ── COTIZADOR ─────────────────────────────────────────────────────────────────
-function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
+function Cotizador({precios,costos,osde,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
   const [cols,setCols]=useState([]);
   const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});
   const [globalZona,setGlobalZona]=useState("AMBA");
+  const [forcedZona,setForcedZona]=useState(null);
   const [planMapping,setPlanMapping]=useState({});
   const [adjPrices,setAdjPrices]=useState({});
   const [adjCostos,setAdjCostos]=useState({});
@@ -893,6 +1007,10 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
   const [scenarios,setScenarios]=useState({}); // {name: {adjPrices, adjCostos}}
   const [showScenarios,setShowScenarios]=useState(false);
   const [nomErrors,setNomErrors]=useState([]); // validación de nómina
+  const [spouseWarning,setSpouseWarning]=useState(null); // advertencia cónyuges múltiples
+  const [brokerPct,setBrokerPct]=useState(""); // comisión del broker (%)
+  const [compareOsde,setCompareOsde]=useState(false);
+  const [osdePlan,setOsdePlan]=useState("");
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
@@ -902,8 +1020,10 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
   const needsMapeo=externalPlans.some(p=>!isOmintPlan(p));
 
   function getEmpZona(e){
-    if(hasZonaCol&&e[map.zonaCol]){const z=String(e[map.zonaCol]).trim();return ZONA_IDS.find(zi=>zi.toLowerCase()===z.toLowerCase())||globalZona;}
-    return globalZona;
+    if(forcedZona) return forcedZona;
+    const col=map.zonaCol;
+    if(col&&e[col]&&e[col].toString().trim()){const z=e[col].toString().trim();return ZONA_IDS.find(zi=>zi.toLowerCase()===z.toLowerCase())||"AMBA";}
+    return "AMBA";
   }
   function getEmpPlan(e){
     if(!map.planCol||!e[map.planCol])return null;
@@ -923,6 +1043,7 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
   }
 
   function buildResults(){
+    const brokerMult=1+(parseFloat(brokerPct)||0)/100;
     return buildGroups().map(({zona,planId,empList})=>{
       const adjKey=`${zona}||${planId}`;
       const basePrices=precios?.[zona]?.[planId]||{};
@@ -930,7 +1051,7 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
       const effPrices=Object.fromEntries(CAT_IDS.map(c=>[c,adjP[c]!==undefined?adjP[c]:basePrices[c]||0]));
       const baseCostos=costos?.[planId]||{};
       const adjC=adjCostos[adjKey]||{};
-      const effCostos=Object.fromEntries(CAT_IDS.map(c=>[c,adjC[c]!==undefined?adjC[c]:baseCostos[c]||0]));
+      const effCostos=Object.fromEntries(CAT_IDS.map(c=>[c,(adjC[c]!==undefined?adjC[c]:baseCostos[c]||0)*brokerMult]));
       const bd=calcBD(empList,map,effPrices,effCostos);
       const mapping=map.planCol?externalPlans.filter(p=>(planMapping[p]===planId)&&!isOmintPlan(p)).map(p=>({from:p,to:planId})):[];
       return{zona,planId,empList,bd,mapping,adjKey,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0};
@@ -967,6 +1088,9 @@ function Cotizador({precios,costos,onSaveQuote,knownEmpresas,apiKey}){
         setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
         const info=`✓ ${result.rows.length} familias cargadas (${result.totalRaw} filas procesadas${result.filasIgnoradas>0?`, ${result.filasIgnoradas} ignoradas`:""})`;
         setNomErrors([{tipo:"info",msg:info}]);
+        if(result.conyugesMultiples&&result.conyugesMultiples.length>0){
+          setSpouseWarning({count:result.conyugesMultiples.length,familias:result.conyugesMultiples.map(x=>x.familia)});
+        }else{setSpouseWarning(null);}
       }catch(err){
         setNomErrors([{tipo:"error",msg:"Error al leer el archivo. Revisá el template."}]);
       }
@@ -1085,11 +1209,11 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     setTimeout(()=>setSaveMsg(""),2500);
   }
 
-  const stepN=sub==="mapeo"?2:sub;
-  const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo"},{n:3,l:"Cotización"}];
+  const stepN=sub===1?1:sub==="mapeo"?2:sub==="comision"?3:4;
+  const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo"},{n:3,l:"Comisión"},{n:4,l:"Cotización"}];
 
   return(<div>
-    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)}/>}
+    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} osdePlan={osdePlan}/>}
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
       {sDef.map((s,i)=>(<Fragment key={s.n}>
@@ -1097,7 +1221,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           <span style={{width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,fontFamily:FONT,background:stepN>=s.n?BLUE:"#E5E7EB",color:stepN>=s.n?"#fff":"#9CA3AF"}}>{s.n}</span>
           <span style={{fontSize:13,fontFamily:FONT,color:stepN===s.n?BLUE:"#9CA3AF",fontWeight:stepN===s.n?700:400}}>{s.l}</span>
         </div>
-        {i<2&&<span style={{color:"#D1D5DB",fontSize:16,margin:"0 4px"}}>›</span>}
+        {i<sDef.length-1&&<span style={{color:"#D1D5DB",fontSize:16,margin:"0 4px"}}>›</span>}
       </Fragment>))}
     </div>
 
@@ -1145,12 +1269,14 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           <span>✅</span><span style={{fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{emps.length} empleados cargados</span>
           <button onClick={()=>{setEmps(null);setCols([]);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});setPlanMapping({});setNomErrors([]);}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",color:"#9CA3AF",fontFamily:FONT}}>✕ Cambiar</button>
         </div>
-
-        {!hasZonaCol&&(<div style={{padding:"12px 16px",background:BLUE_LT,borderRadius:8,marginBottom:"1rem",border:`1px solid ${BORDER}`}}>
-          <p style={{fontSize:12,color:BLUE,fontWeight:600,marginBottom:8,fontFamily:FONT}}>Sin columna de zona — asignás una para todos:</p>
-          <div style={{display:"flex",gap:8}}>{ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z];return(<button key={z} onClick={()=>setGlobalZona(z)} style={{padding:"6px 14px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:globalZona===z?700:400,background:globalZona===z?zc2.c:"#fff",color:globalZona===z?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>{z}</button>);})}</div>
-        </div>)}
       </div>)}
+
+      {/* Zona buttons — always visible in step 1 */}
+      <div style={{padding:"12px 16px",background:BLUE_LT,borderRadius:8,marginBottom:"1rem",border:`1px solid ${BORDER}`,marginTop:"0.75rem"}}>
+        <p style={{fontSize:12,color:BLUE,fontWeight:600,marginBottom:8,fontFamily:FONT}}>Forzar zona (opcional):</p>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z];const sel=forcedZona===z;return(<button key={z} onClick={()=>setForcedZona(sel?null:z)} style={{padding:"6px 14px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:sel?700:400,background:sel?zc2.c:"#fff",color:sel?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>{z}</button>);})}</div>
+        {forcedZona?<p style={{fontSize:11,color:BLUE,marginTop:6,fontFamily:FONT}}>Zona forzada: <strong>{forcedZona}</strong> (sobreescribe la columna del template)</p>:<p style={{fontSize:11,color:"#6B7280",marginTop:6,fontFamily:FONT}}>Sin forzar — se usará la columna de zona del template, o AMBA por defecto.</p>}
+      </div>
       {/* Alertas de nómina */}
       {nomErrors.length>0&&<div style={{marginTop:"1rem",display:"flex",flexDirection:"column",gap:6}}>
         {nomErrors.map((e,i)=>{
@@ -1166,7 +1292,12 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         })}
       </div>}
 
-      {emps&&map.titAge&&map.ku&&(<button onClick={()=>needsMapeo?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>{needsMapeo?"Continuar: mapear planes →":"Ver cotización →"}</button>)}
+      {spouseWarning&&(<div style={{marginTop:"1rem",padding:"12px 16px",borderRadius:10,fontSize:13,fontFamily:FONT,background:"#FEF3C7",color:"#92400E",border:"1.5px solid #FDE68A"}}>
+        <p style={{fontWeight:600,marginBottom:4}}><span style={{fontSize:16,marginRight:6}}>⚠️</span>Se encontraron {spouseWarning.count} grupos familiares con más de 1 cónyuge. Se tomó el primero en cada caso.</p>
+        <p style={{fontSize:12}}>Familias afectadas: {spouseWarning.familias.join(", ")}</p>
+      </div>)}
+
+      {emps&&map.titAge&&map.ku&&(<button onClick={()=>needsMapeo?setSub("mapeo"):setSub("comision")} style={{...btnP,marginTop:"1.5rem"}}>{needsMapeo?"Continuar: mapear planes →":"Continuar →"}</button>)}
     </div>)}
 
     {/* STEP 2: MAPEO */}
@@ -1196,6 +1327,24 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       </div>
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
+        <button onClick={()=>setSub("comision")} style={btnP}>Continuar →</button>
+      </div>
+    </div>)}
+
+    {/* STEP: COMISIÓN BROKER */}
+    {sub==="comision"&&(<div>
+      <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>¿Hay comisión del broker?</h3>
+      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Si el broker cobra una comisión mensual, ingresá el porcentaje. Se sumará al costo de todos los planes en el análisis interno.</p>
+      <div style={card()}>
+        <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Comisión del broker (%)</label>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input type="number" value={brokerPct} onChange={e=>setBrokerPct(e.target.value)} placeholder="Ej: 4" min="0" max="100" style={{...inp,maxWidth:140,textAlign:"right"}}/>
+          <span style={{fontSize:13,color:"#374151",fontFamily:FONT}}>%</span>
+        </div>
+        <p style={{fontSize:12,color:"#6B7280",marginTop:8,fontFamily:FONT}}>Dejá vacío o en 0 si no hay comisión.</p>
+      </div>
+      <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
+        <button onClick={()=>setSub(needsMapeo?"mapeo":1)} style={btnS}>← Anterior</button>
         <button onClick={()=>setSub(3)} style={btnP}>Ver cotización →</button>
       </div>
     </div>)}
@@ -1273,6 +1422,37 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         </div>
         {chat.length>0&&(()=>{const last=chat[chat.length-1];if(last.role!=="assistant")return null;return(<div style={{marginTop:12,padding:"10px 14px",background:"rgba(255,255,255,0.1)",borderRadius:8,fontSize:13,color:"rgba(255,255,255,0.9)",lineHeight:1.55,fontFamily:FONT}}>{last.upd&&<span style={{fontSize:11,color:"#34D399",display:"block",marginBottom:4,fontWeight:600}}>✓ Precios actualizados</span>}{last.content}</div>);})()}
       </div>
+
+      {/* OSDE Comparison Toggle */}
+      {(() => {
+        const osdePlans=Object.keys(osde||{}).sort();
+        const osdeTotal=compareOsde&&osdePlan&&(osde||{})[osdePlan]&&emps?calcOsdeFromEmps(emps,(osde||{})[osdePlan]).total:null;
+        return(<div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <button onClick={()=>setCompareOsde(v=>!v)} style={{...compareOsde?btnP:btnS,fontSize:12,padding:"6px 14px",background:compareOsde?"#7C3AED":"#fff",color:compareOsde?"#fff":"#7C3AED",border:"1.5px solid #7C3AED"}}>
+              {compareOsde?"✓ Comparando con OSDE":"Comparar con OSDE"}
+            </button>
+            {compareOsde&&osdePlans.length>0&&(<select value={osdePlan} onChange={e=>setOsdePlan(e.target.value)} style={{...inp,width:160,fontSize:12,padding:"6px 10px"}}>
+              <option value="">Seleccionar plan</option>
+              {osdePlans.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>)}
+            {compareOsde&&osdePlans.length===0&&<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>No hay planes OSDE cargados. Cargalos en "Precios OSDE".</span>}
+          </div>
+          {compareOsde&&osdeTotal!==null&&(<div style={{marginTop:10,display:"flex",gap:12,flexWrap:"wrap"}}>
+            <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:"10px 16px",flex:"0 0 auto"}}>
+              <p style={{fontSize:11,fontWeight:600,color:"#7C3AED",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>OSDE {osdePlan}</p>
+              <p style={{fontSize:18,fontWeight:700,color:"#7C3AED",fontFamily:FONT}}>${fmt(osdeTotal)}</p>
+            </div>
+            {grandFac>0&&(<div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,padding:"10px 16px",flex:"0 0 auto"}}>
+              <p style={{fontSize:11,fontWeight:600,color:"#065F46",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Diferencia vs Omint</p>
+              <p style={{fontSize:18,fontWeight:700,color:osdeTotal>grandFac?"#DC2626":"#16A34A",fontFamily:FONT}}>
+                {osdeTotal>grandFac?"+":""}{(((osdeTotal-grandFac)/grandFac)*100).toFixed(1)}%
+              </p>
+              <p style={{fontSize:11,color:"#374151",fontFamily:FONT}}>{osdeTotal>grandFac?"OSDE es más caro":"OSDE es más barato"}</p>
+            </div>)}
+          </div>)}
+        </div>);
+      })()}
 
       {/* KPIs */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:"1.5rem"}}>
@@ -1378,7 +1558,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         </div>);
       })}
       {results.length===0&&(<div style={{...card(),textAlign:"center",padding:"3rem",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay empleados mapeados a ningún plan Omint.</p></div>)}
-      <button onClick={()=>setSub(needsMapeo?"mapeo":1)} style={{...btnS,marginTop:"0.5rem"}}>← Volver</button>
+      <button onClick={()=>setSub("comision")} style={{...btnS,marginTop:"0.5rem"}}>← Volver</button>
     </div>)}
   </div>);
 }
@@ -1388,6 +1568,7 @@ export default function App(){
   const [sec,setSec]=useState("cotizador");
   const [precios,setPrecios]=useState(null);
   const [costos,setCostos]=useState(null);
+  const [osde,setOsde]=useState(null);
   const [quotes,setQuotes]=useState([]);
   const [apiKey,setApiKey]=useState("");
   const [loaded,setLoaded]=useState(false);
@@ -1397,17 +1578,20 @@ export default function App(){
     (async()=>{
       const p=await dbGet("precios",lsGet("omint-precios",{}));
       const c=await dbGet("costos",lsGet("omint-costos",{}));
-      setPrecios(p);setCostos(c);
+      const o=await dbGet("osde",lsGet("omint-osde",{}));
+      setPrecios(p);setCostos(c);setOsde(o);
       setQuotes(lsGet("omint-quotes",[]));setApiKey(lsGet("omint-apikey",""));
       setLoaded(true);
       // Suscribir actualizaciones en tiempo real
       dbSubscribe("precios",v=>{setPrecios(v||{});});
       dbSubscribe("costos",v=>{setCostos(v||{});});
+      dbSubscribe("osde",v=>{setOsde(v||{});});
     })();
   },[]);
 
   async function savePre(p){setPrecios(p);lsSet("omint-precios",p);setSyncStatus("syncing");try{await dbSet("precios",p);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error (precios):",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
   async function saveCos(c){setCostos(c);lsSet("omint-costos",c);setSyncStatus("syncing");try{await dbSet("costos",c);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error (costos):",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
+  function saveOsde(o){setOsde(o);lsSet("omint-osde",o);dbSet("osde",o);}
   function saveQuote(q){const nq=[q,...quotes];setQuotes(nq);lsSet("omint-quotes",nq);}
   function updQuote(id,upd){const nq=quotes.map(q=>q.id===id?{...q,...upd}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
   function saveApiKey(k){setApiKey(k);lsSet("omint-apikey",k);}
@@ -1418,6 +1602,7 @@ export default function App(){
     {id:"importar",label:"Importar datos",strong:false},
     {id:"precios",label:"Precios Vigentes",strong:false},
     {id:"costos",label:"Costos Vigentes",strong:false},
+    {id:"osde",label:"Precios OSDE",strong:false},
     {id:"historial",label:"Historial",strong:false},
     {id:"config",label:"Configuración",strong:false},
   ];
@@ -1447,10 +1632,11 @@ export default function App(){
     </div>
     <div style={{flex:1,padding:"2rem 2.5rem",overflowY:"auto",minWidth:0}}>
       {!loaded&&<p style={{fontSize:13,color:"#9CA3AF",fontFamily:FONT}}>Cargando…</p>}
-      {loaded&&sec==="cotizador"&&<Cotizador precios={precios||{}} costos={costos||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
+      {loaded&&sec==="cotizador"&&<Cotizador precios={precios||{}} costos={costos||{}} osde={osde||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
       {loaded&&sec==="importar"&&<Importar onPreciosImport={savePre} onCostosImport={saveCos}/>}
       {loaded&&sec==="precios"&&<PreciosVigentes precios={precios} onSave={savePre}/>}
       {loaded&&sec==="costos"&&<CostosVigentes costos={costos} onSave={saveCos}/>}
+      {loaded&&sec==="osde"&&<OsdeVigentes osde={osde||{}} onSave={saveOsde}/>}
       {loaded&&sec==="historial"&&<Historial quotes={quotes} onUpdate={updQuote}/>}
       {loaded&&sec==="config"&&<Configuracion apiKey={apiKey} onSave={saveApiKey}/>}
     </div>
