@@ -1559,11 +1559,11 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
                         </td>
                         <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(r.bd.totalFac)}</td>
                         <td style={TD({textAlign:"right",fontWeight:600,color:"#7C3AED"})}>{osdeResult?`$${fmt(osdeResult.total)}`:"—"}</td>
-                        <td style={TD({textAlign:"right",color:diff===null?"#9CA3AF":diff>0?"#DC2626":"#16A34A",fontWeight:diff!==null?600:400})}>
+                        <td style={TD({textAlign:"right",color:diff===null?"#9CA3AF":diff>0?"#16A34A":"#DC2626",fontWeight:diff!==null?600:400})}>
                           {diff!==null?`${diff>0?"+":""}$${fmt(Math.abs(diff))}`:"—"}
                         </td>
                         <td style={TD({textAlign:"right"})}>
-                          {pct!==null&&<span style={{...badge(pct>0?"#DC2626":"#16A34A",pct>0?"#FEF2F2":"#D1FAE5"),fontSize:11}}>
+                          {pct!==null&&<span style={{...badge(pct>0?"#16A34A":"#DC2626",pct>0?"#D1FAE5":"#FEF2F2"),fontSize:11}}>
                             {pct>0?"+":""}{pct.toFixed(1)}%
                           </span>}
                         </td>
@@ -1573,11 +1573,11 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
                       <td style={{padding:"10px 12px",fontWeight:700,color:"#7C3AED",fontFamily:FONT}} colSpan={2}>TOTAL</td>
                       <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:BLUE,fontFamily:FONT}}>${fmt(totalOmint)}</td>
                       <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"#7C3AED",fontFamily:FONT}}>${fmt(totalOsde)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:diffTotal>0?"#DC2626":"#16A34A",fontFamily:FONT}}>
+                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:diffTotal>0?"#16A34A":"#DC2626",fontFamily:FONT}}>
                         {diffTotal>0?"+":""}${fmt(Math.abs(diffTotal))}
                       </td>
                       <td style={{padding:"10px 12px",textAlign:"right",fontFamily:FONT}}>
-                        <span style={{...badge(diffPctTotal>0?"#DC2626":"#16A34A",diffPctTotal>0?"#FEF2F2":"#D1FAE5"),fontWeight:700}}>
+                        <span style={{...badge(diffPctTotal>0?"#16A34A":"#DC2626",diffPctTotal>0?"#D1FAE5":"#FEF2F2"),fontWeight:700}}>
                           {diffPctTotal>0?"+":""}{diffPctTotal.toFixed(1)}%
                         </span>
                       </td>
