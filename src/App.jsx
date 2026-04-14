@@ -139,7 +139,8 @@ function parseNominaFija(rawRows,rawCols){
     const nombre=colNombre?String(row[colNombre]||"").trim():"";
     if(!familias[gid])familias[gid]={GRUPO:gid,NOMBRE:nombre,EDAD_TITULAR:null,
       CONYUGES:[],  // lista de TODAS las edades de conyuges
-      HIJOS_MENORES_25:0,HIJOS_MAYORES_25:0,PLAN_ACTUAL:"",ZONA:zona};
+      HIJOS_MENORES_25:0,HIJOS_MAYORES_25:0,PLAN_ACTUAL:"",ZONA:zona,
+      OSDE_HIJO_26_27:0,OSDE_IND_JOVEN:0,OSDE_IND_MAYOR:0};
     if(tipo==="T"){
       if(edad!==null)familias[gid].EDAD_TITULAR=edad;
       if(plan)familias[gid].PLAN_ACTUAL=plan;
@@ -150,8 +151,13 @@ function parseNominaFija(rawRows,rawCols){
       if(edad!==null)familias[gid].CONYUGES.push(edad);
     }else if(tipo==="H"){
       if(edad!==null){
-        if(edad<=25)familias[gid].HIJOS_MENORES_25++;  // FIX: <= en lugar de <
+        if(edad<=25)familias[gid].HIJOS_MENORES_25++;
         else familias[gid].HIJOS_MAYORES_25++;
+        // OSDE usa 28 como corte: <28 = hijo, >=28 = individual
+        if(edad<28){
+          if(edad>25)familias[gid].OSDE_HIJO_26_27++; // 26-27: FAC en Omint, hijo en OSDE
+        }else if(edad<=35){familias[gid].OSDE_IND_JOVEN++;}
+        else{familias[gid].OSDE_IND_MAYOR++;}
       }
     }
   });
@@ -174,6 +180,9 @@ function parseNominaFija(rawRows,rawCols){
       HIJOS_MENORES_25:f.HIJOS_MENORES_25,
       HIJOS_MAYORES_25:f.HIJOS_MAYORES_25,
       PLAN_ACTUAL:f.PLAN_ACTUAL,ZONA:f.ZONA,
+      OSDE_HIJO_26_27:f.OSDE_HIJO_26_27,
+      OSDE_IND_JOVEN:f.OSDE_IND_JOVEN,
+      OSDE_IND_MAYOR:f.OSDE_IND_MAYOR,
     });
   });
 
@@ -245,6 +254,48 @@ function parseCostosFile(file){
   });
 }
 
+function parseOsdeFile(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();r.onerror=rej;
+    r.onload=e=>{
+      try{
+        const wb=XLSX.read(e.target.result,{type:"binary"});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+        const result={};
+        rows.forEach(row=>{
+          if(!row||row[0]==null)return;
+          const planName=String(row[0]).trim();
+          // Saltar filas de encabezado
+          if(!planName||/^(plan|nombre|categoria)/i.test(planName))return;
+          const prices={};
+          OSDE_CATS.forEach((cat,ci)=>{
+            const v=row[ci+1];
+            prices[cat.id]=typeof v==="number"?Math.round(v):parseFloat(String(v||"0").replace(/[^0-9.]/g,""))||0;
+          });
+          if(Object.values(prices).some(v=>v>0))result[planName]=prices;
+        });
+        if(Object.keys(result).length===0)rej(new Error("No se encontraron planes con precios. Usá el template."));
+        else res(result);
+      }catch(err){rej(err);}
+    };
+    r.readAsBinaryString(file);
+  });
+}
+
+function downloadOsdeTemplate(){
+  const headers=["Plan",...OSDE_CATS.map(c=>c.label)];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    headers,
+    ["210",12000,15000,18000,22000,26000,30000,8000,7000],
+    ["410",20000,25000,30000,36000,42000,50000,13000,11000],
+  ]);
+  ws["!cols"]=[{wch:10},...OSDE_CATS.map(()=>({wch:22}))];
+  XLSX.utils.book_append_sheet(wb,ws,"Precios OSDE");
+  XLSX.writeFile(wb,"template_precios_osde.xlsx");
+}
+
 // ── CALC BD ───────────────────────────────────────────────────────────────────
 function calcBD(emps,map,prices,costos){
   const c={...EMPTY_CATS};
@@ -270,14 +321,18 @@ function calcOsdeFromEmps(emps,osdePrices){
     const edadTit=parseInt(row.EDAD_TITULAR)||0;
     const edadCon=parseInt(row.EDAD_CONYUGE)||0;
     const hasSpouse=edadCon>0;
-    const hijMen=parseInt(row.HIJOS_MENORES_25)||0;
-    const hijMay=parseInt(row.HIJOS_MAYORES_25)||0;
+    const hijMen=parseInt(row.HIJOS_MENORES_25)||0; // <=25: hijo en ambos
+    const hij2627=parseInt(row.OSDE_HIJO_26_27)||0; // 26-27: FAC en Omint, hijo en OSDE
+    const hijOsdeIndJoven=parseInt(row.OSDE_IND_JOVEN)||0; // 28-35: ind_joven en OSDE
+    const hijOsdeIndMayor=parseInt(row.OSDE_IND_MAYOR)||0; // 36+: ind_mayor en OSDE
     const prefix=hasSpouse?"mat":"ind";
     const suffix=edadTit<28?"neo":edadTit<=35?"joven":"mayor";
     counts[`${prefix}_${suffix}`]++;
-    if(hijMen>=1)counts.hijo1++;
-    if(hijMen>=2)counts.hijo2plus+=(hijMen-1);
-    counts.ind_mayor+=hijMay;
+    const totalOsdeHijo=hijMen+hij2627;
+    if(totalOsdeHijo>=1)counts.hijo1++;
+    if(totalOsdeHijo>=2)counts.hijo2plus+=(totalOsdeHijo-1);
+    counts.ind_joven+=hijOsdeIndJoven;
+    counts.ind_mayor+=hijOsdeIndMayor;
   });
   const total=OSDE_CATS.reduce((sum,cat)=>sum+counts[cat.id]*(osdePrices[cat.id]||0),0);
   return{counts,total};
@@ -447,7 +502,7 @@ function generateProposalHTML(cfg,results){
 
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
-function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,osdePlan){
+function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde){
   const today=new Date().toLocaleDateString("es-AR");
   const mes=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date().getMonth()];
   const vigencia=`${mes.charAt(0).toUpperCase()+mes.slice(1)} ${new Date().getFullYear()}`;
@@ -603,34 +658,38 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,osdePlan){
   cfWs["!cols"]=[{wch:14},{wch:10},{wch:8},{wch:16},{wch:16},{wch:8},{wch:12}];
   XLSX.utils.book_append_sheet(wb,cfWs,"Análisis CF");
 
-  // OSDE comparison sheet
-  if(osde&&osdePlan&&osde[osdePlan]&&emps){
-    const osdeResult=calcOsdeFromEmps(emps,osde[osdePlan]);
+  // OSDE comparison sheet — one block per mapped plan
+  const osdeEntries=Object.entries(planMappingOsde||{}).filter(([adjKey,osdePlanName])=>osdePlanName&&osde&&osde[osdePlanName]);
+  if(osdeEntries.length>0){
     const osWs={};let or=0;
-    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc(`Comparación Omint vs OSDE ${osdePlan}`,BOLD_C);or++;or++;
-    ["Categoría","Cantidad","Precio OSDE","Subtotal"].forEach((h,ci)=>{osWs[XLSX.utils.encode_cell({c:ci,r:or})]=sc(h,BOLD_C);});or++;
-    OSDE_CATS.forEach(cat=>{
-      const qty=osdeResult.counts[cat.id]||0;
-      const price=osde[osdePlan][cat.id]||0;
-      const sub=qty*price;
-      [cat.label,qty,price,sub].forEach((v,ci)=>{
-        const fmt=ci===2||ci===3?MONEY:null;
-        osWs[XLSX.utils.encode_cell({c:ci,r:or})]=sc(v,ci===0?L:C,fmt);
-      });or++;
+    osdeEntries.forEach(([adjKey,osdePlanName])=>{
+      const res=results.find(r=>r.adjKey===adjKey);
+      if(!res)return;
+      const osdeResult=calcOsdeFromEmps(res.empList,osde[osdePlanName]);
+      const omintFac=res.bd.totalFac;
+      osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc(`${res.zona} · ${res.planId} → OSDE ${osdePlanName}`,BOLD_C);or++;or++;
+      ["Categoría","Cantidad","Precio OSDE","Subtotal"].forEach((h,ci)=>{osWs[XLSX.utils.encode_cell({c:ci,r:or})]=sc(h,BOLD_C);});or++;
+      OSDE_CATS.forEach(cat=>{
+        const qty=osdeResult.counts[cat.id]||0;
+        const price=osde[osdePlanName][cat.id]||0;
+        const sub=qty*price;
+        [cat.label,qty,price,sub].forEach((v,ci)=>{
+          const numFmt=ci===2||ci===3?MONEY:null;
+          osWs[XLSX.utils.encode_cell({c:ci,r:or})]=sc(v,ci===0?L:C,numFmt);
+        });or++;
+      });
+      or++;
+      osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Total OSDE",BOLD_C);
+      osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+osdeResult.total.toFixed(2),BOLD_C,MONEY);or++;
+      osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Total Omint",BOLD_C);
+      osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+omintFac.toFixed(2),BOLD_C,MONEY);or++;
+      const diff=osdeResult.total-omintFac;
+      const diffPct=omintFac>0?diff/omintFac:0;
+      osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Diferencia ($)",BOLD_C);
+      osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+diff.toFixed(2),BOLD_C,MONEY);or++;
+      osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Diferencia (%)",BOLD_C);
+      osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+diffPct.toFixed(4),BOLD_C,"0.00%");or+=3;
     });
-    or++;
-    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Total OSDE facturación",BOLD_C);
-    osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+osdeResult.total.toFixed(2),BOLD_C,MONEY);or++;
-    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Total Omint facturación",BOLD_C);
-    osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+totalFac.toFixed(2),BOLD_C,MONEY);or++;
-    const diff=osdeResult.total-totalFac;
-    const diffPct=totalFac>0?diff/totalFac:0;
-    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Diferencia ($)",BOLD_C);
-    osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+diff.toFixed(2),BOLD_C,MONEY);or++;
-    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Diferencia (%)",BOLD_C);
-    osWs[XLSX.utils.encode_cell({c:3,r:or})]=sc(+diffPct.toFixed(4),BOLD_C,"0.00%");or++;
-    or++;
-    osWs[XLSX.utils.encode_cell({c:0,r:or})]=sc("Nota: Los hijos mayores de 25 años son tratados como Individual (+35) en OSDE.",L);or++;
     osWs["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:3,r:or}});
     osWs["!cols"]=[{wch:30},{wch:10},{wch:14},{wch:16}];
     XLSX.utils.book_append_sheet(wb,osWs,"Comparación OSDE");
@@ -668,7 +727,7 @@ function downloadTemplate(){
 }
 
 // ── MODAL EXPORTAR ────────────────────────────────────────────────────────────
-function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,osdePlan}){
+function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMappingOsde}){
   const [cfg,setCfg]=useState({
     empresa:empresa||"",
     fecha:new Date().toISOString().split("T")[0],
@@ -736,7 +795,7 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,osdePlan}){
           </div>
           <div style={{display:"flex",gap:10,marginTop:"0.5rem"}}>
             <button onClick={exportPDF} style={{...btnP,flex:1}}>📄 Exportar PDF</button>
-            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef,brokerPct,osde,osdePlan);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel análisis</button>
+            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef,brokerPct,osde,planMappingOsde);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel análisis</button>
           </div>
           <p style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT,textAlign:"center"}}>El PDF se abre en una nueva pestaña → usá Ctrl+P o Cmd+P para guardar como PDF</p>
         </div>
@@ -927,6 +986,8 @@ function OsdeVigentes({osde,onSave}){
   const [newPlan,setNewPlan]=useState("");
   const [loc,setLoc]=useState({...EMPTY_OSDE});
   const [ok,setOk]=useState(false);
+  const [importStatus,setImportStatus]=useState(null);
+  const [importMsg,setImportMsg]=useState("");
   const selPlan=plans.includes(plan)?plan:(plans[0]||null);
   useEffect(()=>{if(selPlan)setLoc({...EMPTY_OSDE,...(osde[selPlan]||{})});},[selPlan,osde]);
   function save(){
@@ -942,9 +1003,34 @@ function OsdeVigentes({osde,onSave}){
     if(!selPlan||!confirm(`¿Eliminar plan OSDE "${selPlan}"?`))return;
     const nxt={...(osde||{})};delete nxt[selPlan];onSave(nxt);setPlan(Object.keys(nxt)[0]||null);
   }
+  async function handleOsdeFile(e){
+    const f=e.target.files[0];if(!f)return;
+    setImportStatus("loading");
+    try{
+      const data=await parseOsdeFile(f);
+      onSave({...(osde||{}),...data});
+      setImportStatus("ok");
+      setImportMsg(`${Object.keys(data).length} plan(es) importados: ${Object.keys(data).join(", ")}`);
+      if(Object.keys(data).length>0)setPlan(Object.keys(data)[0]);
+    }catch(err){setImportStatus("error");setImportMsg(err.message);}
+  }
   return(<div>
     <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Precios OSDE</h2>
-    <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Precios de referencia de OSDE para comparación en el análisis.</p>
+    <p style={{fontSize:13,color:"#6B7280",marginBottom:"1rem",fontFamily:FONT}}>Precios de referencia de OSDE para comparación en el análisis.</p>
+    {/* Import por Excel */}
+    <div style={{...card(),marginBottom:"1rem",padding:"12px 16px",background:"#FAF5FF",border:"1px solid #DDD6FE"}}>
+      <p style={{fontSize:12,fontWeight:600,color:"#7C3AED",marginBottom:8,fontFamily:FONT}}>Importar precios desde Excel</p>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <label style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",border:"1.5px solid #7C3AED",borderRadius:8,cursor:"pointer",background:"#fff",fontSize:12,fontFamily:FONT,color:"#7C3AED",fontWeight:500}}>
+          <span>📂</span><span>Subir Excel</span>
+          <input type="file" accept=".xlsx,.xls" onChange={handleOsdeFile} style={{display:"none"}}/>
+        </label>
+        <button onClick={downloadOsdeTemplate} style={{...btnS,fontSize:12,padding:"7px 14px",color:"#7C3AED",borderColor:"#DDD6FE"}}>↓ Bajar template</button>
+        {importStatus==="ok"&&<span style={{fontSize:12,color:"#16A34A",fontFamily:FONT}}>✓ {importMsg}</span>}
+        {importStatus==="error"&&<span style={{fontSize:12,color:"#DC2626",fontFamily:FONT}}>✗ {importMsg}</span>}
+        {importStatus==="loading"&&<span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>Procesando…</span>}
+      </div>
+    </div>
     <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
       {plans.map(p=>(<button key={p} onClick={()=>setPlan(p)} style={{...btnP,background:p===selPlan?"#7C3AED":"#fff",color:p===selPlan?"#fff":"#7C3AED",border:"1.5px solid #7C3AED",fontSize:12}}>{p}</button>))}
       <div style={{display:"flex",gap:6}}>
@@ -1010,7 +1096,7 @@ function Cotizador({precios,costos,osde,onSaveQuote,knownEmpresas,apiKey}){
   const [spouseWarning,setSpouseWarning]=useState(null); // advertencia cónyuges múltiples
   const [brokerPct,setBrokerPct]=useState(""); // comisión del broker (%)
   const [compareOsde,setCompareOsde]=useState(false);
-  const [osdePlan,setOsdePlan]=useState("");
+  const [planMappingOsde,setPlanMappingOsde]=useState({});
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
@@ -1213,7 +1299,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
   const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo"},{n:3,l:"Comisión"},{n:4,l:"Cotización"}];
 
   return(<div>
-    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} osdePlan={osdePlan}/>}
+    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde}/>}
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
       {sDef.map((s,i)=>(<Fragment key={s.n}>
@@ -1424,35 +1510,42 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       </div>
 
       {/* OSDE Comparison Toggle */}
-      {(() => {
-        const osdePlans=Object.keys(osde||{}).sort();
-        const osdeTotal=compareOsde&&osdePlan&&(osde||{})[osdePlan]&&emps?calcOsdeFromEmps(emps,(osde||{})[osdePlan]).total:null;
-        return(<div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            <button onClick={()=>setCompareOsde(v=>!v)} style={{...compareOsde?btnP:btnS,fontSize:12,padding:"6px 14px",background:compareOsde?"#7C3AED":"#fff",color:compareOsde?"#fff":"#7C3AED",border:"1.5px solid #7C3AED"}}>
-              {compareOsde?"✓ Comparando con OSDE":"Comparar con OSDE"}
-            </button>
-            {compareOsde&&osdePlans.length>0&&(<select value={osdePlan} onChange={e=>setOsdePlan(e.target.value)} style={{...inp,width:160,fontSize:12,padding:"6px 10px"}}>
-              <option value="">Seleccionar plan</option>
-              {osdePlans.map(p=><option key={p} value={p}>{p}</option>)}
-            </select>)}
-            {compareOsde&&osdePlans.length===0&&<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>No hay planes OSDE cargados. Cargalos en "Precios OSDE".</span>}
+      <div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:compareOsde?10:0}}>
+          <button onClick={()=>setCompareOsde(v=>!v)} style={{...compareOsde?btnP:btnS,fontSize:12,padding:"6px 14px",background:compareOsde?"#7C3AED":"#fff",color:compareOsde?"#fff":"#7C3AED",border:"1.5px solid #7C3AED"}}>
+            {compareOsde?"✓ Comparando con OSDE":"Comparar con OSDE"}
+          </button>
+        </div>
+        {compareOsde&&(Object.keys(osde||{}).length===0
+          ?<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>No hay planes OSDE cargados. Cargalos en "Precios OSDE".</span>
+          :<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {results.length===0&&<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>Cargá una nómina y configurá los planes para ver la comparación.</span>}
+            {results.map(r=>{
+              const osdePlans=Object.keys(osde||{}).sort();
+              const mappedPlan=planMappingOsde[r.adjKey]||"";
+              const osdeResult=mappedPlan&&(osde||{})[mappedPlan]?calcOsdeFromEmps(r.empList,(osde||{})[mappedPlan]):null;
+              return(<div key={r.adjKey} style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{...badge(ZONA_COLORS[r.zona]?.c||BLUE,ZONA_COLORS[r.zona]?.bg||BLUE_LT),fontSize:11,minWidth:64}}>{r.zona}</span>
+                <span style={{fontSize:12,color:BLUE,fontFamily:FONT,fontWeight:600,minWidth:90}}>{r.planId}</span>
+                <span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>→</span>
+                <select value={mappedPlan} onChange={e=>setPlanMappingOsde(p=>({...p,[r.adjKey]:e.target.value}))} style={{...inp,width:160,fontSize:12,padding:"6px 10px"}}>
+                  <option value="">No comparar</option>
+                  {osdePlans.map(p=><option key={p} value={p}>{p}</option>)}
+                </select>
+                {osdeResult&&(<>
+                  <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:"6px 12px"}}>
+                    <span style={{fontSize:12,color:"#7C3AED",fontWeight:700,fontFamily:FONT}}>OSDE {mappedPlan}: ${fmt(osdeResult.total)}</span>
+                  </div>
+                  {r.bd.totalFac>0&&<span style={{fontSize:12,fontWeight:700,fontFamily:FONT,color:osdeResult.total>r.bd.totalFac?"#DC2626":"#16A34A"}}>
+                    {osdeResult.total>r.bd.totalFac?"+":""}{(((osdeResult.total-r.bd.totalFac)/r.bd.totalFac)*100).toFixed(1)}%
+                    {" "}<span style={{fontWeight:400,color:"#6B7280"}}>{osdeResult.total>r.bd.totalFac?"(OSDE más caro)":"(OSDE más barato)"}</span>
+                  </span>}
+                </>)}
+              </div>);
+            })}
           </div>
-          {compareOsde&&osdeTotal!==null&&(<div style={{marginTop:10,display:"flex",gap:12,flexWrap:"wrap"}}>
-            <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:"10px 16px",flex:"0 0 auto"}}>
-              <p style={{fontSize:11,fontWeight:600,color:"#7C3AED",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>OSDE {osdePlan}</p>
-              <p style={{fontSize:18,fontWeight:700,color:"#7C3AED",fontFamily:FONT}}>${fmt(osdeTotal)}</p>
-            </div>
-            {grandFac>0&&(<div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,padding:"10px 16px",flex:"0 0 auto"}}>
-              <p style={{fontSize:11,fontWeight:600,color:"#065F46",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Diferencia vs Omint</p>
-              <p style={{fontSize:18,fontWeight:700,color:osdeTotal>grandFac?"#DC2626":"#16A34A",fontFamily:FONT}}>
-                {osdeTotal>grandFac?"+":""}{(((osdeTotal-grandFac)/grandFac)*100).toFixed(1)}%
-              </p>
-              <p style={{fontSize:11,color:"#374151",fontFamily:FONT}}>{osdeTotal>grandFac?"OSDE es más caro":"OSDE es más barato"}</p>
-            </div>)}
-          </div>)}
-        </div>);
-      })()}
+        )}
+      </div>
 
       {/* KPIs */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:"1.5rem"}}>
