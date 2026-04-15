@@ -566,6 +566,14 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     function p(col,r,v,font,fill,align,border,nf){
       ws[XLSX.utils.encode_cell({c:col,r})]= sc(v,font,fill,align,border,nf);
     }
+    // helper: put formula cell (f=formula string, v=fallback value)
+    function pF(col,r,formula,v,font,fill,align,border,nf){
+      const cell=sc(v??0,font,fill,align,border,nf);
+      cell.f=formula; cell.t="n";
+      ws[XLSX.utils.encode_cell({c:col,r})]=cell;
+    }
+    // Excel address helper (0-based col/row → "B4")
+    const ea=(c,r)=>XLSX.utils.encode_cell({c,r});
     function merge(c1,r1,c2,r2){merges.push({s:{c:c1,r:r1},e:{c:c2,r:r2}});}
 
     // Col layout: A=0 Plan, B=1 0-25, C=2 26-35, D=3 36-54, E=4 55-59, F=5 60+, G=6 (gap), H=7 H1, I=8 H2+
@@ -598,6 +606,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     });
     row++;
 
+    const distPlanFirstRow=row;
     zResults.forEach((res,pi)=>{
       const fill=pi===0?FILL_GOLD:FILL_TEAL; // simplificado para distribución
       const planName=res.mapping.length>0?res.mapping.map(m=>m.from).join(", "):res.planId;
@@ -609,25 +618,28 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         planTot+=cnt;
         p(CAT_COLS[ci],row,cnt,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_INT);
       });
-      p(9,row,planTot,fBOLD,FILL_GRAY,aC,BORDER_ALL,NF_INT);
+      pF(9,row,`${ea(1,row)}+${ea(2,row)}+${ea(3,row)}+${ea(4,row)}+${ea(7,row)}+${ea(8,row)}`,planTot,fBOLD,FILL_GRAY,aC,BORDER_ALL,NF_INT);
       row++;
     });
+    const distPlanLastRow=row-1;
 
     // Total row
+    const distTotalRowIdx=row;
     p(0,row,"Total",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     CAT_KEYS.forEach((k,ci)=>{
       if(k==null)return;
-      p(CAT_COLS[ci],row,distTot[k],fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL,NF_INT);
+      pF(CAT_COLS[ci],row,`SUM(${ea(CAT_COLS[ci],distPlanFirstRow)}:${ea(CAT_COLS[ci],distPlanLastRow)})`,distTot[k],fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL,NF_INT);
     });
-    p(9,row,grandTotal,fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL,NF_INT);
+    pF(9,row,`SUM(${ea(9,distPlanFirstRow)}:${ea(9,distPlanLastRow)})`,grandTotal,fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL,NF_INT);
     row++;
 
     // % row
+    const distPctRowIdx=row;
     CAT_KEYS.forEach((k,ci)=>{
       if(k==null)return;
-      p(CAT_COLS[ci],row,grandTotal>0?distTot[k]/grandTotal:0,fNorm,null,aC,BORDER_ALL,NF_PCT);
+      pF(CAT_COLS[ci],row,`${ea(CAT_COLS[ci],distTotalRowIdx)}/${ea(9,distTotalRowIdx)}`,grandTotal>0?distTot[k]/grandTotal:0,fNorm,null,aC,BORDER_ALL,NF_PCT);
     });
-    p(9,row,1,fNorm,null,aC,BORDER_ALL,NF_PCT);
+    pF(9,row,`${ea(9,distTotalRowIdx)}/${ea(9,distTotalRowIdx)}`,1,fNorm,null,aC,BORDER_ALL,NF_PCT);
     row++;
 
     row++; // spacer
@@ -648,19 +660,21 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     // values 0-59 (no 60+)
     const keys059=["s0_25","s26_34","s35_54","s55_59",null,null,"h1","h2plus"];
     const cols059=[1,2,3,4,null,null,7,8];
+    const rango059DataRowIdx=row;
     keys059.forEach((k,ci)=>{
       if(!k)return;
-      p(cols059[ci],row,distTot[k],fNorm,FILL_GRAY,aC,BORDER_ALL,NF_INT);
+      pF(cols059[ci],row,`+${ea(cols059[ci],distTotalRowIdx)}`,distTot[k],fNorm,FILL_GRAY,aC,BORDER_ALL,NF_INT);
     });
-    p(9,row,tot059,fBOLD,FILL_GRAY,aC,BORDER_ALL,NF_INT);
+    pF(9,row,`${ea(1,row)}+${ea(2,row)}+${ea(3,row)}+${ea(4,row)}+${ea(7,row)}+${ea(8,row)}`,tot059,fBOLD,FILL_GRAY,aC,BORDER_ALL,NF_INT);
     row++;
 
     // % row 0-59
+    const rango059PctRowIdx=row;
     keys059.forEach((k,ci)=>{
       if(!k)return;
-      p(cols059[ci],row,tot059>0?distTot[k]/tot059:0,fNorm,null,aC,BORDER_ALL,NF_PCT);
+      pF(cols059[ci],row,`${ea(cols059[ci],rango059DataRowIdx)}/${ea(9,rango059DataRowIdx)}`,tot059>0?distTot[k]/tot059:0,fNorm,null,aC,BORDER_ALL,NF_PCT);
     });
-    p(9,row,1,fNorm,null,aC,BORDER_ALL,NF_PCT);
+    pF(9,row,`${ea(9,rango059DataRowIdx)}/${ea(9,rango059DataRowIdx)}`,1,fNorm,null,aC,BORDER_ALL,NF_PCT);
     row++;
 
     row++; // spacer
@@ -710,6 +724,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
     // plan rows prices
     const precioRows=[]; // save for cotizacion section
+    const precioRowIdxs=[]; // row indices for formula references
     zResults.forEach((res,pi)=>{
       const pf=planFill(pi);
       const planName=res.mapping.length>0?res.mapping.map(m=>m.from).join(", "):res.planId;
@@ -732,11 +747,12 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       p(1,row,"—",fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL); // placeholder — sin formula
       p(2,row,"—",fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL);
 
+      // capitado prices — static values (category prices overwritten in same row)
       p(3,row,+precio059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       p(4,row,+precio60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       p(5,row,+precioGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
 
-      // vs plan anterior (compare with previous plan in sorted order)
+      // vs plan anterior — formula referencing capitado cells of prev row
       if(pi===0){
         p(6,row,"—",fNorm,FILL_GRAY,aC,BORDER_ALL);
         p(7,row,"—",fNorm,FILL_GRAY,aC,BORDER_ALL);
@@ -750,18 +766,20 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         const prevPGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>{
           const cnt=distTot[k]; const pr=prev.bd.rows.find(x=>x.id===k)?.precio||0; return a+cnt*pr;
         },0)/grandTotal:0;
-        p(6,row,prevP059>0?precio059/prevP059-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
-        p(7,row,prevP60>0?precio60/prevP60-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
-        p(8,row,prevPGen>0?precioGen/prevPGen-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
+        const prevRowIdx=precioRowIdxs[pi-1];
+        pF(6,row,`${ea(3,row)}/${ea(3,prevRowIdx)}-1`,prevP059>0?precio059/prevP059-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
+        pF(7,row,`${ea(4,row)}/${ea(4,prevRowIdx)}-1`,prevP60>0?precio60/prevP60-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
+        pF(8,row,`${ea(5,row)}/${ea(5,prevRowIdx)}-1`,prevPGen>0?precioGen/prevPGen-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
       }
 
-      const cf059=precio059>0?res.bd.totalCosto/res.bd.totalFac:0;
       const cfGen=precioGen>0?res.bd.cfTotal/100:0;
+      // C/F — reference cotización costs/prices (static for now since costs in different section)
       p(9,row,+res.bd.cfTotal.toFixed(1)/100,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       p(10,row,precio60>0?res.bd.rows.find(x=>x.id==="s60plus")?.costo>0?res.bd.rows.find(x=>x.id==="s60plus").costo/precio60:0:0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       p(11,row,+cfGen.toFixed(4),fNorm,null,aC,BORDER_ALL,NF_PCT1);
 
       precioRows.push({res,pi,planName,precio059,precio60,precioGen});
+      precioRowIdxs.push(row);
       row++;
     });
 
@@ -890,6 +908,8 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     const totalCosto=zResults.reduce((a,r)=>a+r.bd.totalCosto,0);
     let totalOsdeAllPlans=0;
 
+    const cotPlanFirstRow=row;
+    const cotPlanRowIdxs=[];
     zResults.forEach((res,pi)=>{
       const pf=planFill(pi);
       const planName=res.mapping.length>0?res.mapping.map(m=>m.from).join(", "):res.planId;
@@ -903,38 +923,55 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       p(1,row,osdeFac>0?+osdeFac.toFixed(2):null,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_MONEY2);
       p(2,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
       p(3,row,+res.bd.totalFac.toFixed(2),fNorm,FILL_GRAY,aC,BORDER_ALL,NF_MONEY2);
-      p(4,row,vsOsde!==null?+vsOsde.toFixed(4):null,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
+      // VS OSDE formula: D/B-1
+      if(osdeFac>0){
+        pF(4,row,`${ea(3,row)}/${ea(1,row)}-1`,vsOsde!==null?+vsOsde.toFixed(4):null,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
+      } else {
+        p(4,row,null,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
+      }
       p(5,row,+res.bd.totalCosto.toFixed(2),fNorm,FILL_GRAY,aC,BORDER_ALL,NF_MONEY2);
-      p(6,row,res.bd.totalFac>0?+(res.bd.totalCosto/res.bd.totalFac).toFixed(4):0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
+      // C/F formula: F/D
+      pF(6,row,`${ea(5,row)}/${ea(3,row)}`,res.bd.totalFac>0?+(res.bd.totalCosto/res.bd.totalFac).toFixed(4):0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
+      cotPlanRowIdxs.push(row);
       row++;
     });
 
     // Total row
+    const cotTotalRowIdx=row;
+    const cotPlanLastRow=row-1;
     const totalOsde=totalOsdeAllPlans;
     const vsOsdeTotal=totalOsde>0&&totalFac>0?totalFac/totalOsde-1:null;
     p(0,row,"Total",fWHITE,FILL_NAVY,aC,BORDER_ALL);
-    p(1,row,totalOsde>0?+totalOsde.toFixed(2):null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
+    pF(1,row,`SUM(${ea(1,cotPlanFirstRow)}:${ea(1,cotPlanLastRow)})`,totalOsde>0?+totalOsde.toFixed(2):null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
     p(2,row,"",fWHITE,FILL_NAVY,aC,BORDER_ALL);
-    p(3,row,+totalFac.toFixed(2),fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
-    p(4,row,vsOsdeTotal!==null?+vsOsdeTotal.toFixed(4):null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
-    p(5,row,+totalCosto.toFixed(2),fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
-    p(6,row,totalFac>0?+(totalCosto/totalFac).toFixed(4):0,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
+    pF(3,row,`SUM(${ea(3,cotPlanFirstRow)}:${ea(3,cotPlanLastRow)})`,+totalFac.toFixed(2),fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
+    if(totalOsde>0){
+      pF(4,row,`${ea(3,cotTotalRowIdx)}/${ea(1,cotTotalRowIdx)}-1`,vsOsdeTotal!==null?+vsOsdeTotal.toFixed(4):null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
+    } else {
+      p(4,row,null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
+    }
+    pF(5,row,`SUM(${ea(5,cotPlanFirstRow)}:${ea(5,cotPlanLastRow)})`,+totalCosto.toFixed(2),fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
+    pF(6,row,`${ea(5,cotTotalRowIdx)}/${ea(3,cotTotalRowIdx)}`,totalFac>0?+(totalCosto/totalFac).toFixed(4):0,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
     row++;
 
     // Masa salarial / aporte
     const masaSal=parseFloat(masaSalarial)||0;
     if(masaSal>0){
       row++;
+      const masaSalRowIdx=row;
       p(0,row,"Masa salarial:",fBOLD,null,aL,BORDER_ALL);
       p(1,row,+masaSal.toFixed(2),fNorm,null,aC,BORDER_ALL,NF_MONEY2);
       row++;
+      const aporteRowIdx=row;
       const aporte=masaSal*0.09*0.85*(1+1/12);
       p(0,row,"Aporte (9% × 85% × 13/12):",fBOLD,null,aL,BORDER_ALL);
-      p(1,row,+aporte.toFixed(2),fNorm,null,aC,BORDER_ALL,NF_MONEY2);
+      // formula: masa_sal * 9% * 85% * 13/12
+      pF(1,row,`${ea(1,masaSalRowIdx)}*0.09*0.85*(13/12)`,+aporte.toFixed(2),fNorm,null,aC,BORDER_ALL,NF_MONEY2);
       row++;
       const saldo=totalFac-aporte;
       p(0,row,"Saldo a pagar:",fBOLD,null,aL,BORDER_ALL);
-      p(1,row,+saldo.toFixed(2),fRED,null,aC,BORDER_ALL,NF_MONEY2);
+      // formula: total Fact. Omint - aporte
+      pF(1,row,`${ea(3,cotTotalRowIdx)}-${ea(1,aporteRowIdx)}`,+saldo.toFixed(2),fRED,null,aC,BORDER_ALL,NF_MONEY2);
       row++;
     }
 
