@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import "./App.css";
 import { dbGet, dbSet, dbSubscribe } from "./firebase";
 import { lsGet, lsSet } from "./db";
-import { FONT, BLUE, BLUE_LT, BORDER, GRAY } from "./constants";
+import { FONT, BLUE, BLUE_LT, BORDER, GRAY, OMINT_LOGO } from "./constants";
 import { badge, btnP, btnS, card } from "./styles";
 import Cotizador from "./components/Cotizador";
 import Importar from "./components/Importar";
