@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FONT, BLUE, BLUE_LT, BORDER, ZONA_IDS, ZONA_COLORS, CATS } from "../constants";
+import { useState, useEffect } from "react";
+import { FONT, BLUE, BLUE_LT, BORDER, ZONA_IDS, ZONA_COLORS, CATS, EMPTY_CATS } from "../constants";
 import { fmt } from "../utils";
 import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 

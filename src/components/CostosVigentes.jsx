@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { FONT, BLUE, BORDER, CATS } from "../constants";
+import { useState, useEffect } from "react";
+import { FONT, BLUE, BORDER, CATS, EMPTY_CATS } from "../constants";
 import { fmt } from "../utils";
-import { btnP, btnS, numInp, card, TH, TD } from "../styles";
+import { btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 
 // ── COSTOS VIGENTES ───────────────────────────────────────────────────────────
 function CostosVigentes({costos,onSave}){

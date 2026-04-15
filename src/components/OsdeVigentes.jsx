@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FONT, BLUE, BORDER, OSDE_CATS } from "../constants";
+import { useState, useEffect } from "react";
+import { FONT, BLUE, BORDER, OSDE_CATS, EMPTY_OSDE } from "../constants";
 import { btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 import { parseOsdeFile, downloadOsdeTemplate } from "../parsers";
 
