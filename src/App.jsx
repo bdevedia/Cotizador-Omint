@@ -13,7 +13,7 @@ import OsdeVigentes from "./components/OsdeVigentes";
 import Configuracion from "./components/Configuracion";
 
 // ── APP SHELL ─────────────────────────────────────────────────────────────────
-export default function App(){
+function App(){
   const [sec,setSec]=useState("cotizador");
   const [precios,setPrecios]=useState(null);
   const [costos,setCostos]=useState(null);
