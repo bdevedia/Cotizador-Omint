@@ -157,24 +157,43 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(1,row,"Adulto / Cónyuge / FAC / Hijo mayor 25",fCAT,null,aL,BORDER_BOT);
     merge(1,row,5,row);
     p(7,row,"Hijo menor 25",fCAT,null,aL,BORDER_BOT);
-    merge(7,row,8,row);
-    p(9,row,"Precios capitados",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
-    merge(9,row,11,row); row++;
+    merge(7,row,8,row); row++;
 
     ["00 - 25","26 - 35","36 - 54","55 - 59","60 +"].forEach((h,i)=>p(i+1,row,h,fBOLD,null,aC,BORDER_ALL));
     p(7,row,"Hijo 1",fBOLD,null,aC,BORDER_ALL);
     p(8,row,"Hijo 2 o +",fBOLD,null,aC,BORDER_ALL);
-    p(9,row,"0-59",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
-    p(10,row,"60+",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
-    p(11,row,"General",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     row++;
 
-    p(1,row,"Ajuste",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL); merge(1,row,2,row);
+    // Pre-calcular índices: precio rows primero, luego spacer + 2 headers de ajuste, luego ajuste rows
+    // Layout: [N price rows] [spacer] [ajuste_hdr1] [ajuste_hdr2] [N ajuste rows]
+    const N=zResults.length;
+    const basePriceRowIdxs=zResults.map((_,pi)=>row+pi);          // rows: row..row+N-1
+    const adjRowIdxs=zResults.map((_,pi)=>row+N+1+2+pi);          // rows: row+N+3..row+N+3+N-1
+    const dP=distPctRowIdx;
+    const rP=rango059PctRowIdx;
+
+    // ── Filas de precios (una por plan) ──
+    zResults.forEach((res,pi)=>{
+      const pf=planFill(pi);
+      const getP=id=>res.bd.rows.find(x=>x.id===id)?.precio||0;
+      const adj=adjRowIdxs[pi];
+      p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
+      [getP("s0_25"),getP("s26_34"),getP("s35_54"),getP("s55_59")].forEach((v,i)=>
+        pF(i+1,row,`${+v.toFixed(0)}*(1+${ea(1,adj)})`,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
+      pF(5,row,`${+getP("s60plus").toFixed(0)}*(1+${ea(2,adj)})`,+getP("s60plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(7,row,`${+getP("h1").toFixed(0)}*(1+${ea(1,adj)})`,+getP("h1").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(8,row,`${+getP("h2plus").toFixed(0)}*(1+${ea(1,adj)})`,+getP("h2plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      row++;
+    });
+
+    row++; // spacer
+
+    // ── Sección Ajustes (headers) ──
+    p(1,row,"Ajustes",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL); merge(1,row,2,row);
     p(3,row,"Precios capitados",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL); merge(3,row,5,row);
     p(6,row,"Vs. plan anterior",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL); merge(6,row,8,row);
     p(9,row,"C/F",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL); merge(9,row,11,row);
     row++;
-
     p(1,row,"0-59",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     p(2,row,"60+",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     p(3,row,"0-59",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
@@ -188,49 +207,25 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(11,row,"General",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     row++;
 
-    // Pre-calcular índices de filas sec 3 (bpr=base, adj=ajuste, 2 filas por plan)
-    const basePriceRowIdxs=zResults.map((_,pi)=>row+pi*2);
-    const adjRowIdxs=zResults.map((_,pi)=>row+pi*2+1);
-
+    // ── Filas de ajuste (una por plan) ──
     zResults.forEach((res,pi)=>{
       const pf=planFill(pi);
       const getP=id=>res.bd.rows.find(x=>x.id===id)?.precio||0;
-
-      // ── Base prices row: precio_cotizador * (1 + ajuste) ──
       const bpr=basePriceRowIdxs[pi];
       const adj=adjRowIdxs[pi];
+
       p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
-      // 0-59 cats usan adj 0-59 (col 1), 60+ usa adj 60+ (col 2)
-      [getP("s0_25"),getP("s26_34"),getP("s35_54"),getP("s55_59")].forEach((v,i)=>
-        pF(i+1,row,`${+v.toFixed(0)}*(1+${ea(1,adj)})`,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
-      pF(5,row,`${+getP("s60plus").toFixed(0)}*(1+${ea(2,adj)})`,+getP("s60plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(7,row,`${+getP("h1").toFixed(0)}*(1+${ea(1,adj)})`,+getP("h1").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(8,row,`${+getP("h2plus").toFixed(0)}*(1+${ea(1,adj)})`,+getP("h2plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      row++;
+      p(1,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 0-59 (editable)
+      p(2,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 60+ (editable)
 
-      // ── Ajuste row ──
-      p(0,row,"Ajuste",fBOLD,pf,aC,BORDER_ALL);
-
-      // Adjustment inputs (editable, start at 0)
-      p(1,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 0-59
-      p(2,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 60+
-
-      // Capitado: bpr ya tiene precios ajustados (precio_base*(1+adj)), solo ponderar
       const precio059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getP(k)||0),0)/tot059:0;
       const precio60=getP("s60plus");
       const precioGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getP(k)||0),0)/grandTotal:0;
 
-      const dP=distPctRowIdx;
-      const rP=rango059PctRowIdx;
-
-      // cap059 = SUMPRODUCT(precios_ajustados_059, pct_059)
       pF(3,row,`SUMPRODUCT(${ea(1,bpr)}:${ea(8,bpr)},${ea(1,rP)}:${ea(8,rP)})`,+precio059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      // cap60 = precio_60_ajustado
       pF(4,row,`+${ea(5,bpr)}`,+precio60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      // capGen = SUMPRODUCT(precios_ajustados, pct_total)
       pF(5,row,`SUMPRODUCT(${ea(1,bpr)}:${ea(8,bpr)},${ea(1,dP)}:${ea(8,dP)})`,+precioGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
 
-      // Vs plan anterior
       if(pi===0){
         p(6,row,"—",fNorm,FILL_GRAY,aC,BORDER_ALL);
         p(7,row,"—",fNorm,FILL_GRAY,aC,BORDER_ALL);
@@ -246,7 +241,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         pF(8,row,`${ea(5,adj)}/${ea(5,prevAdj)}-1`,prevPGen>0?precioGen/prevPGen-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
       }
 
-      // C/F cols 9,10,11 — will be updated with formulas after sec 6 is written
+      // C/F — se sobreescribe luego de sec 6
       p(9,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       p(10,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       p(11,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
