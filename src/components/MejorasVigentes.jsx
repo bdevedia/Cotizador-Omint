@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER, GRAY, CATS, CAT_IDS, MEJORAS_DEF, EMPTY_MEJORAS } from "../constants";
 import { btnP, btnS, inp, card, TH, TD } from "../styles";
 
@@ -9,6 +9,11 @@ function MejorasVigentes({mejoras,onSave}){
     MEJORAS_DEF.forEach(m=>{base[m.id]={...(mejoras[m.id]||{})};});
     return base;
   });
+  useEffect(()=>{
+    const base={...EMPTY_MEJORAS};
+    MEJORAS_DEF.forEach(m=>{base[m.id]={...(mejoras[m.id]||{})};});
+    setLoc(base);
+  },[mejoras]);
   const [ok,setOk]=useState(false);
 
   function save(){
