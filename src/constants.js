@@ -36,8 +36,20 @@ const EMPTY_OSDE=Object.fromEntries(OSDE_CATS.map(c=>[c.id,0]));
 const BANDA="200-499"; // siempre fijo
 const PRECIO_COLS=[1,2,3,4,5,7,8]; // columnas en el XLS de precios
 
+const MEJORAS_DEF=[
+  {id:"farmacia",   label:"Farmacia",        type:"cats"},
+  {id:"optica",     label:"Óptica por SCE",  type:"pmpm"},
+  {id:"ortodoncia", label:"Ortodoncia",       type:"cats"},
+  {id:"pyt",        label:"PYT",             type:"cats"},
+  {id:"oa",         label:"OA",              type:"pmpm"},
+  {id:"copagos",    label:"Copagos",         type:"cats"},
+  {id:"checkup",    label:"Check Up Anual",  type:"pmpm"},
+];
+const EMPTY_MEJORAS={farmacia:{},optica:{},ortodoncia:{},pyt:{},oa:{},copagos:{},checkup:{}};
+
 export { OMINT_LOGO, FONT, BLUE, BLUE_LT, BORDER, GRAY,
   CATS, CAT_IDS, EMPTY_CATS,
   ZONA_IDS, ZONA_COLORS,
   OSDE_CATS, EMPTY_OSDE,
-  BANDA, PRECIO_COLS };
+  BANDA, PRECIO_COLS,
+  MEJORAS_DEF, EMPTY_MEJORAS };

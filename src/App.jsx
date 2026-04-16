@@ -8,6 +8,7 @@ import Cotizador from "./components/Cotizador";
 import Importar from "./components/Importar";
 import PreciosVigentes from "./components/PreciosVigentes";
 import CostosVigentes from "./components/CostosVigentes";
+import MejorasVigentes from "./components/MejorasVigentes";
 import Historial from "./components/Historial";
 import OsdeVigentes from "./components/OsdeVigentes";
 import Configuracion from "./components/Configuracion";
@@ -18,6 +19,7 @@ function App(){
   const [precios,setPrecios]=useState(null);
   const [costos,setCostos]=useState(null);
   const [osde,setOsde]=useState(null);
+  const [mejoras,setMejoras]=useState(null);
   const [quotes,setQuotes]=useState([]);
   const [apiKey,setApiKey]=useState("");
   const [loaded,setLoaded]=useState(false);
@@ -28,18 +30,21 @@ function App(){
       const p=await dbGet("precios",lsGet("omint-precios",{}));
       const c=await dbGet("costos",lsGet("omint-costos",{}));
       const o=await dbGet("osde",lsGet("omint-osde",{}));
-      setPrecios(p);setCostos(c);setOsde(o);
+      const mej=await dbGet("mejoras",lsGet("omint-mejoras",{}));
+      setPrecios(p);setCostos(c);setOsde(o);setMejoras(mej);
       setQuotes(lsGet("omint-quotes",[]));setApiKey(lsGet("omint-apikey",""));
       setLoaded(true);
       // Suscribir actualizaciones en tiempo real
       dbSubscribe("precios",v=>{setPrecios(v||{});});
       dbSubscribe("costos",v=>{setCostos(v||{});});
       dbSubscribe("osde",v=>{setOsde(v||{});});
+      dbSubscribe("mejoras",v=>{setMejoras(v||{});});
     })();
   },[]);
 
   async function savePre(p){setPrecios(p);lsSet("omint-precios",p);setSyncStatus("syncing");try{await dbSet("precios",p);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error (precios):",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
   async function saveCos(c){setCostos(c);lsSet("omint-costos",c);setSyncStatus("syncing");try{await dbSet("costos",c);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error (costos):",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
+  async function saveMejoras(m){setMejoras(m);lsSet("omint-mejoras",m);setSyncStatus("syncing");try{await dbSet("mejoras",m);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn(e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
   function saveOsde(o){setOsde(o);lsSet("omint-osde",o);dbSet("osde",o);}
   function saveQuote(q){const nq=[q,...quotes];setQuotes(nq);lsSet("omint-quotes",nq);}
   function updQuote(id,upd){const nq=quotes.map(q=>q.id===id?{...q,...upd}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
@@ -51,6 +56,7 @@ function App(){
     {id:"importar",label:"Importar datos",strong:false},
     {id:"precios",label:"Precios Vigentes",strong:false},
     {id:"costos",label:"Costos Vigentes",strong:false},
+    {id:"mejoras",label:"Mejoras",strong:false},
     {id:"osde",label:"Precios OSDE",strong:false},
     {id:"historial",label:"Historial",strong:false},
     {id:"config",label:"Configuración",strong:false},
@@ -81,10 +87,11 @@ function App(){
     </div>
     <div style={{flex:1,padding:"2rem 2.5rem",overflowY:"auto",minWidth:0}}>
       {!loaded&&<p style={{fontSize:13,color:"#9CA3AF",fontFamily:FONT}}>Cargando…</p>}
-      {loaded&&sec==="cotizador"&&<Cotizador precios={precios||{}} costos={costos||{}} osde={osde||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
+      {loaded&&sec==="cotizador"&&<Cotizador precios={precios||{}} costos={costos||{}} osde={osde||{}} mejoras={mejoras||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
       {loaded&&sec==="importar"&&<Importar onPreciosImport={savePre} onCostosImport={saveCos}/>}
       {loaded&&sec==="precios"&&<PreciosVigentes precios={precios} onSave={savePre}/>}
       {loaded&&sec==="costos"&&<CostosVigentes costos={costos} onSave={saveCos}/>}
+      {loaded&&sec==="mejoras"&&<MejorasVigentes mejoras={mejoras||{}} onSave={saveMejoras}/>}
       {loaded&&sec==="osde"&&<OsdeVigentes osde={osde||{}} onSave={saveOsde}/>}
       {loaded&&sec==="historial"&&<Historial quotes={quotes} onUpdate={updQuote}/>}
       {loaded&&sec==="config"&&<Configuracion apiKey={apiKey} onSave={saveApiKey}/>}

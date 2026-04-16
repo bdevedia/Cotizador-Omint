@@ -3,7 +3,7 @@ import * as XLSX from "xlsx-js-style";
 import { FONT, BLUE, BLUE_LT, BORDER, GRAY,
   CATS, CAT_IDS, EMPTY_CATS,
   ZONA_IDS, ZONA_COLORS,
-  OSDE_CATS, EMPTY_OSDE } from "../constants";
+  OSDE_CATS, EMPTY_OSDE, MEJORAS_DEF } from "../constants";
 import { catAge, cfColor, cfBg, cfLabel, fmt, fmtD, exJSON, stripJ, planTier } from "../utils";
 import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
@@ -11,7 +11,7 @@ import { calcBD, calcOsdeFromEmps, checkPriceInversions } from "../calc";
 import ExportModal from "./ExportModal";
 
 // ── COTIZADOR ─────────────────────────────────────────────────────────────────
-function Cotizador({precios,costos,osde,onSaveQuote,knownEmpresas,apiKey}){
+function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
   const [cols,setCols]=useState([]);
@@ -36,6 +36,7 @@ function Cotizador({precios,costos,osde,onSaveQuote,knownEmpresas,apiKey}){
   const [brokerPct,setBrokerPct]=useState(""); // comisión del broker (%)
   const [compareOsde,setCompareOsde]=useState(false);
   const [planMappingOsde,setPlanMappingOsde]=useState({});
+  const [planMejoras,setPlanMejoras]=useState({});
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
@@ -76,7 +77,19 @@ function Cotizador({precios,costos,osde,onSaveQuote,knownEmpresas,apiKey}){
       const effPrices=Object.fromEntries(CAT_IDS.map(c=>[c,adjP[c]!==undefined?adjP[c]:basePrices[c]||0]));
       const baseCostos=costos?.[planId]||{};
       const adjC=adjCostos[adjKey]||{};
-      const effCostos=Object.fromEntries(CAT_IDS.map(c=>[c,(adjC[c]!==undefined?adjC[c]:baseCostos[c]||0)*brokerMult]));
+      const mejSel=planMejoras[adjKey]||{};
+      const effCostos=Object.fromEntries(CAT_IDS.map(c=>{
+        const base=adjC[c]!==undefined?adjC[c]:baseCostos[c]||0;
+        let mejCost=0;
+        MEJORAS_DEF.forEach(m=>{
+          const optKey=mejSel[m.id];
+          if(!optKey)return;
+          const opt=(mejoras||{})[m.id]?.[optKey];
+          if(opt==null)return;
+          mejCost+=m.type==="pmpm"?(typeof opt==="number"?opt:0):(opt[c]||0);
+        });
+        return[c,(base+mejCost)*brokerMult];
+      }));
       const bd=calcBD(empList,map,effPrices,effCostos);
       const mapping=map.planCol?externalPlans.filter(p=>(planMapping[p]===planId)&&!isOmintPlan(p)).map(p=>({from:p,to:planId})):[];
       return{zona,planId,empList,bd,mapping,adjKey,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0};
@@ -238,7 +251,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
   const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo"},{n:3,l:"Comisión"},{n:4,l:"Cotización"}];
 
   return(<div>
-    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde}/>}
+    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}}/>}
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
       {sDef.map((s,i)=>(<Fragment key={s.n}>
@@ -596,6 +609,40 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
               </tbody>
             </table>
           </div>
+          {/* MEJORAS per plan */}
+          {(()=>{
+            const hasAnyOpts=MEJORAS_DEF.some(m=>Object.keys((mejoras||{})[m.id]||{}).length>0);
+            if(!hasAnyOpts)return null;
+            return(<div style={{marginTop:"1rem",padding:"12px 14px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8}}>
+              <p style={{fontSize:12,fontWeight:600,color:"#166534",marginBottom:8,fontFamily:FONT}}>Mejoras opcionales</p>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {MEJORAS_DEF.map(m=>{
+                  const options=Object.keys((mejoras||{})[m.id]||{});
+                  if(options.length===0)return null;
+                  const selected=planMejoras[r.adjKey]?.[m.id]||null;
+                  return(<div key={m.id} style={{display:"flex",alignItems:"center",gap:10}}>
+                    <input type="checkbox"
+                      checked={!!selected}
+                      onChange={e=>{
+                        const firstOpt=options[0];
+                        setPlanMejoras(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[m.id]:e.target.checked?firstOpt:null}}));
+                      }}
+                      id={`mej-${r.adjKey}-${m.id}`}
+                    />
+                    <label htmlFor={`mej-${r.adjKey}-${m.id}`} style={{fontSize:12,fontFamily:FONT,minWidth:120}}>{m.label}</label>
+                    {!!selected&&options.length>1&&(
+                      <select value={selected} onChange={e=>setPlanMejoras(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[m.id]:e.target.value}}))} style={{fontSize:12,padding:"3px 8px",borderRadius:6,border:"1px solid #D1D5DB",fontFamily:FONT}}>
+                        {options.map(o=><option key={o} value={o}>{o}</option>)}
+                      </select>
+                    )}
+                    {!!selected&&options.length===1&&(
+                      <span style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>{selected}</span>
+                    )}
+                  </div>);
+                })}
+              </div>
+            </div>);
+          })()}
           {/* Comparación con precios vigentes */}
           {adjPrices[r.adjKey]&&(()=>{
             const base=precios?.[r.zona]?.[r.planId]||{};

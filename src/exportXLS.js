@@ -1,9 +1,9 @@
 import * as XLSX from "xlsx-js-style";
-import { CATS, CAT_IDS, ZONA_IDS } from "./constants";
+import { CATS, CAT_IDS, ZONA_IDS, MEJORAS_DEF } from "./constants";
 import { calcOsdeFromEmps } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
-function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial){
+function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap){
   const today=new Date().toLocaleDateString("es-AR");
   const mes=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date().getMonth()];
   const mesAno=`${mes.charAt(0).toUpperCase()+mes.slice(1)} ${new Date().getFullYear()}`;
@@ -309,7 +309,19 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     zResults.forEach((res,pi)=>{
       mejoraRowIdxs.push(row);
       p(0,row,res.planId,fBOLD,planFill(pi),aC,BORDER_ALL);
-      [1,2,3,4,5,7,8].forEach(ci=>p(ci,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_MONEY));
+      const mejSel=(planMejorasMap||{})[res.adjKey]||{};
+      [1,2,3,4,5,7,8].forEach(ci=>{
+        const catKey=CAT_KEYS[CAT_COLS.indexOf(ci)];
+        let total=0;
+        (MEJORAS_DEF||[]).forEach(m=>{
+          const optKey=mejSel[m.id];
+          if(!optKey)return;
+          const opt=(mejoras||{})[m.id]?.[optKey];
+          if(opt==null)return;
+          total+=m.type==="pmpm"?(typeof opt==="number"?opt:0):(opt[catKey]||0);
+        });
+        p(ci,row,total,fNorm,total>0?null:FILL_LIGHTBLUE,aC,BORDER_ALL,NF_MONEY);
+      });
       row++;
     });
 
