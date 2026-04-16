@@ -1,4 +1,4 @@
-import { CATS, CAT_IDS, EMPTY_CATS, OSDE_CATS } from "./constants";
+import { CATS, CAT_IDS, EMPTY_CATS, OSDE_CATS, EMPTY_OSDE } from "./constants";
 import { catAge, planTier } from "./utils";
 
 // ── CALC BD ───────────────────────────────────────────────────────────────────
