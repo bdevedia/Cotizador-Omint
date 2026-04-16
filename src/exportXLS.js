@@ -254,13 +254,11 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(0,row,`Costos EE - ${zona} - ${mesAno}`,fWHITE,FILL_DARK_HEADER,aL,BORDER_ALL);
     merge(0,row,11,row); row++;
 
-    let brokerCellRef=null;
-    if(parseFloat(brokerPct)>0){
-      p(0,row,"Comisión:",fBOLD,FILL_GREEN,aL,BORDER_ALL);
-      brokerCellRef=ea(1,row);
-      p(1,row,parseFloat(brokerPct)/100,fNorm,FILL_GREEN,aC,BORDER_ALL,NF_PCT);
-      row++;
-    }
+    // Comisión siempre presente y editable — sección 6 la referencia
+    p(0,row,"Comisión:",fBOLD,FILL_GREEN,aL,BORDER_ALL);
+    const brokerCellRef=ea(1,row);
+    p(1,row,parseFloat(brokerPct)/100||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT);
+    row++;
 
     p(1,row,"Adulto / Cónyuge / FAC / Hijo mayor 25",fCAT,null,aL,BORDER_BOT);
     merge(1,row,5,row);
@@ -345,7 +343,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       costoTotRowIdxs.push(ctr);
       p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
       const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
-      const brokerFactor=brokerCellRef?`(1+${brokerCellRef})`:`${1+(parseFloat(brokerPct)||0)/100}`;
+      const brokerFactor=`(1+${brokerCellRef})`;
       // Each cat = (costoEE + mejora) × (1 + comisión)
       [1,2,3,4,5,7,8].forEach(ci=>{
         const key=CAT_KEYS[CAT_COLS.indexOf(ci)];
