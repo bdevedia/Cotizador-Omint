@@ -8,10 +8,8 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
   const mes=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date().getMonth()];
   const mesAno=`${mes.charAt(0).toUpperCase()+mes.slice(1)} ${new Date().getFullYear()}`;
 
-  // ── Estilos base ──────────────────────────────────────────────────────────
   const FONT_NAME="Aptos Narrow";
   const SZ=9;
-  const base=(extra={})=>({font:{name:FONT_NAME,sz:SZ},...extra});
   const FILL_DARK_HEADER={fgColor:{rgb:"17375E"},patternType:"solid"};
   const FILL_NAVY     ={fgColor:{rgb:"1F3864"},patternType:"solid"};
   const FILL_GOLD     ={fgColor:{rgb:"FFC000"},patternType:"solid"};
@@ -30,7 +28,6 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
   const BORDER_BOT={bottom:THIN};
   const aL={horizontal:"left",vertical:"center",wrapText:true};
   const aC={horizontal:"center",vertical:"center",wrapText:true};
-  const aR={horizontal:"right",vertical:"center"};
   const NF_MONEY='"$" #,##0;[Red]-"$" #,##0';
   const NF_MONEY2="#,##0.00";
   const NF_PCT  ="0%";
@@ -67,12 +64,12 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     const ea=(c,r)=>XLSX.utils.encode_cell({c,r});
     function merge(c1,r1,c2,r2){merges.push({s:{c:c1,r:r1},e:{c:c2,r:r2}});}
 
-    // Col layout: A=0 Plan, B=1..F=5 adult prices, G=6 gap, H=7 H1, I=8 H2+
-    // J=9, K=10, L=11 caps/cf/vs
+    // Col layout: A=0, B=1(s0_25), C=2(s26_34), D=3(s35_54), E=4(s55_59), F=5(s60plus), G=6(gap), H=7(h1), I=8(h2plus)
+    // J=9, K=10, L=11
     const CAT_KEYS=["s0_25","s26_34","s35_54","s55_59","s60plus",null,"h1","h2plus"];
     const CAT_COLS=[1,2,3,4,5,null,7,8];
 
-    // Distribution totals across ALL plans in this zona
+    // Distribution totals across ALL plans
     const distTot={s0_25:0,s26_34:0,s35_54:0,s55_59:0,s60plus:0,h1:0,h2plus:0};
     zResults.forEach(res=>{
       CAT_KEYS.filter(Boolean).forEach(k=>{
@@ -162,8 +159,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(7,row,"Hijo menor 25",fCAT,null,aL,BORDER_BOT);
     merge(7,row,8,row);
     p(9,row,"Precios capitados",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
-    merge(9,row,11,row);
-    row++;
+    merge(9,row,11,row); row++;
 
     ["00 - 25","26 - 35","36 - 54","55 - 59","60 +"].forEach((h,i)=>p(i+1,row,h,fBOLD,null,aC,BORDER_ALL));
     p(7,row,"Hijo 1",fBOLD,null,aC,BORDER_ALL);
@@ -173,7 +169,6 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(11,row,"General",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     row++;
 
-    // Ajuste sub-header
     p(1,row,"Ajuste",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL); merge(1,row,2,row);
     p(3,row,"Precios capitados",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL); merge(3,row,5,row);
     p(6,row,"Vs. plan anterior",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL); merge(6,row,8,row);
@@ -193,7 +188,6 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(11,row,"General",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     row++;
 
-    // Per-plan: base price row + ajuste row
     const basePriceRowIdxs=[];
     const adjRowIdxs=[];
 
@@ -201,7 +195,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const pf=planFill(pi);
       const getP=id=>res.bd.rows.find(x=>x.id===id)?.precio||0;
 
-      // ── Row 1: base prices ──
+      // ── Base prices row (static values) ──
       const bpr=row;
       basePriceRowIdxs.push(bpr);
       p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
@@ -210,28 +204,31 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       p(8,row,+getP("h2plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       row++;
 
-      // ── Row 2: ajuste + capitado ──
+      // ── Ajuste row ──
       const adj=row;
       adjRowIdxs.push(adj);
       p(0,row,"Ajuste",fBOLD,pf,aC,BORDER_ALL);
 
-      // Ajuste cells: editable 0 (highlighted blue)
+      // Adjustment inputs (editable, start at 0)
       p(1,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 0-59
       p(2,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 60+
 
-      // Capitado 0-59 = SUMPRODUCT(dist_059_counts × base_prices) / tot059 × (1+adj059)
+      // Capitado 0-59 = SUMPRODUCT(base_prices, pct_059) × (1+adj059)
       const precio059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getP(k)||0),0)/tot059:0;
       const precio60=getP("s60plus");
       const precioGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getP(k)||0),0)/grandTotal:0;
 
-      const sp059=`(${ea(1,distTotalRowIdx)}*${ea(1,bpr)}+${ea(2,distTotalRowIdx)}*${ea(2,bpr)}+${ea(3,distTotalRowIdx)}*${ea(3,bpr)}+${ea(4,distTotalRowIdx)}*${ea(4,bpr)}+${ea(7,distTotalRowIdx)}*${ea(7,bpr)}+${ea(8,distTotalRowIdx)}*${ea(8,bpr)})`;
-      const tot059ref=`IF(${ea(9,rango059DataRowIdx)}=0,1,${ea(9,rango059DataRowIdx)})`;
-      const totGenRef=`IF(${ea(9,distTotalRowIdx)}=0,1,${ea(9,distTotalRowIdx)})`;
-      pF(3,row,`${sp059}/${tot059ref}*(1+${ea(1,adj)})`,+precio059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(4,row,`${ea(5,bpr)}*(1+${ea(2,adj)})`,+precio60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(5,row,`(${sp059}*(1+${ea(1,adj)})+${ea(5,distTotalRowIdx)}*${ea(5,bpr)}*(1+${ea(2,adj)}))/${totGenRef}`,+precioGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      const dP=distPctRowIdx; // pct total
+      const rP=rango059PctRowIdx; // pct 0-59
 
-      // Vs. plan anterior
+      // cap059 = SUMPRODUCT(prices, pct059) × (1+adj1)
+      pF(3,row,`SUMPRODUCT(${ea(1,bpr)}:${ea(8,bpr)},${ea(1,rP)}:${ea(8,rP)})*(1+${ea(1,adj)})`,+precio059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      // cap60 = price60 × (1+adj2)
+      pF(4,row,`${ea(5,bpr)}*(1+${ea(2,adj)})`,+precio60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      // capGen = (0-59 cats × pct_total)×(1+adj1) + (60+ × pct_total_60)×(1+adj2)
+      pF(5,row,`(${ea(1,bpr)}*${ea(1,dP)}+${ea(2,bpr)}*${ea(2,dP)}+${ea(3,bpr)}*${ea(3,dP)}+${ea(4,bpr)}*${ea(4,dP)}+${ea(7,bpr)}*${ea(7,dP)}+${ea(8,bpr)}*${ea(8,dP)})*(1+${ea(1,adj)})+${ea(5,bpr)}*${ea(5,dP)}*(1+${ea(2,adj)})`,+precioGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+
+      // Vs plan anterior
       if(pi===0){
         p(6,row,"—",fNorm,FILL_GRAY,aC,BORDER_ALL);
         p(7,row,"—",fNorm,FILL_GRAY,aC,BORDER_ALL);
@@ -247,23 +244,23 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         pF(8,row,`${ea(5,adj)}/${ea(5,prevAdj)}-1`,prevPGen>0?precioGen/prevPGen-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
       }
 
-      // C/F static (referenciados desde sec 6 que aún no se escribió)
-      const cfGen=precioGen>0?res.bd.cfTotal/100:0;
-      p(9,row,+res.bd.cfTotal.toFixed(1)/100,fNorm,null,aC,BORDER_ALL,NF_PCT1);
-      p(10,row,precio60>0?(res.bd.rows.find(x=>x.id==="s60plus")?.costo||0)/precio60:0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
-      p(11,row,+cfGen.toFixed(4),fNorm,null,aC,BORDER_ALL,NF_PCT1);
+      // C/F cols 9,10,11 — will be updated with formulas after sec 6 is written
+      p(9,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
+      p(10,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
+      p(11,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       row++;
     });
 
     row++;
 
     // ── SECCIÓN 4: Costos EE ─────────────────────────────────────────────────
-    const brokerMult=1+(parseFloat(brokerPct)||0)/100;
     p(0,row,`Costos EE - ${zona} - ${mesAno}`,fWHITE,FILL_DARK_HEADER,aL,BORDER_ALL);
     merge(0,row,11,row); row++;
 
+    let brokerCellRef=null;
     if(parseFloat(brokerPct)>0){
       p(0,row,"Comisión:",fBOLD,FILL_GREEN,aL,BORDER_ALL);
+      brokerCellRef=ea(1,row);
       p(1,row,parseFloat(brokerPct)/100,fNorm,FILL_GREEN,aC,BORDER_ALL,NF_PCT);
       row++;
     }
@@ -350,27 +347,34 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const ctr=row;
       costoTotRowIdxs.push(ctr);
       p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
-
-      // Each cat: =costoEE + mejora
       const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
+      const brokerFactor=brokerCellRef?`(1+${brokerCellRef})`:`${1+(parseFloat(brokerPct)||0)/100}`;
+      // Each cat = (costoEE + mejora) × (1 + comisión)
       [1,2,3,4,5,7,8].forEach(ci=>{
-        const keys=["s0_25","s26_34","s35_54","s55_59","s60plus",null,"h1","h2plus"].filter((_,i)=>[1,2,3,4,5,null,7,8][i]===ci);
         const key=CAT_KEYS[CAT_COLS.indexOf(ci)];
         const baseVal=+(getC(key||"s0_25")||0).toFixed(0);
-        pF(ci,row,`${ea(ci,eer)}+${ea(ci,mer)}`,baseVal,fNorm,null,aC,BORDER_ALL,NF_MONEY);
+        pF(ci,row,`(${ea(ci,eer)}+${ea(ci,mer)})*${brokerFactor}`,baseVal,fNorm,null,aC,BORDER_ALL,NF_MONEY);
       });
 
-      // Capitado 0-59: SUMPRODUCT(dist × costoTot_cats) / tot059
-      const sp059c=`(${ea(1,distTotalRowIdx)}*${ea(1,ctr)}+${ea(2,distTotalRowIdx)}*${ea(2,ctr)}+${ea(3,distTotalRowIdx)}*${ea(3,ctr)}+${ea(4,distTotalRowIdx)}*${ea(4,ctr)}+${ea(7,distTotalRowIdx)}*${ea(7,ctr)}+${ea(8,distTotalRowIdx)}*${ea(8,ctr)})`;
-      const totGenRef2=`IF(${ea(9,distTotalRowIdx)}=0,1,${ea(9,distTotalRowIdx)})`;
-      const tot059ref2=`IF(${ea(9,rango059DataRowIdx)}=0,1,${ea(9,rango059DataRowIdx)})`;
+      // Capitado 0-59: SUMPRODUCT(costoTot × pct_059)
+      const dP=distPctRowIdx;
+      const rP=rango059PctRowIdx;
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
-      pF(9,row,`${sp059c}/${tot059ref2}`,+costo059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(9,row,`SUMPRODUCT(${ea(1,ctr)}:${ea(8,ctr)},${ea(1,rP)}:${ea(8,rP)})`,+costo059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       pF(10,row,`+${ea(5,ctr)}`,+costo60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(11,row,`(${sp059c}+${ea(5,distTotalRowIdx)}*${ea(5,ctr)})/${totGenRef2}`,+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(11,row,`(${ea(1,ctr)}*${ea(1,dP)}+${ea(2,ctr)}*${ea(2,dP)}+${ea(3,ctr)}*${ea(3,dP)}+${ea(4,ctr)}*${ea(4,dP)}+${ea(7,ctr)}*${ea(7,dP)}+${ea(8,ctr)}*${ea(8,dP)})+${ea(5,ctr)}*${ea(5,dP)}`,+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       row++;
+    });
+
+    // ── Retroalimentar C/F en sec 3 (ahora que tenemos costoTotRowIdxs) ──────
+    zResults.forEach((_,pi)=>{
+      const adj=adjRowIdxs[pi];
+      const ctr=costoTotRowIdxs[pi];
+      pF(9,adj,`IF(${ea(3,adj)}=0,0,${ea(9,ctr)}/${ea(3,adj)})`,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
+      pF(10,adj,`IF(${ea(4,adj)}=0,0,${ea(10,ctr)}/${ea(4,adj)})`,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
+      pF(11,adj,`IF(${ea(5,adj)}=0,0,${ea(11,ctr)}/${ea(5,adj)})`,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
     });
 
     row++;
@@ -381,9 +385,6 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       return mo&&osde?.[mo];
     });
 
-    // Dynamic cols based on whether OSDE comparison exists
-    // hasOsde=true:  0=plan 1=osdeFac 2=omintPlan 3=omintFac 4=vsOsde 5=costo 6=cf
-    // hasOsde=false: 0=plan 1=omintPlan 2=omintFac 3=costo 4=cf
     const CC=hasOsde
       ?{plan:0,osdeFac:1,omintPlan:2,omintFac:3,vsOsde:4,costo:5,cf:6,last:6}
       :{plan:0,omintPlan:1,omintFac:2,costo:3,cf:4,last:4};
@@ -421,11 +422,14 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       }
       p(CC.omintPlan,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
 
-      // Fact. Omint = cap059 × tot059 + cap60 × count_60
+      // Fact. Omint = SUMPRODUCT(precios_ajustados_por_cat × conteos_del_plan)
+      // = (059_cats × adj1 + 60+ × adj2) por los conteos de este plan
+      const bpr=basePriceRowIdxs[pi];
       const adj=adjRowIdxs[pi];
+      const pd=distPlanFirstRow+pi; // fila de distribución de este plan
       const factFallback=+res.bd.totalFac.toFixed(2);
       pF(CC.omintFac,row,
-        `${ea(3,adj)}*${ea(9,rango059DataRowIdx)}+${ea(4,adj)}*${ea(5,distTotalRowIdx)}`,
+        `(${ea(1,bpr)}*${ea(1,pd)}+${ea(2,bpr)}*${ea(2,pd)}+${ea(3,bpr)}*${ea(3,pd)}+${ea(4,bpr)}*${ea(4,pd)}+${ea(7,bpr)}*${ea(7,pd)}+${ea(8,bpr)}*${ea(8,pd)})*(1+${ea(1,adj)})+${ea(5,bpr)}*${ea(5,pd)}*(1+${ea(2,adj)})`,
         factFallback,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_MONEY2);
 
       if(hasOsde){
@@ -436,15 +440,15 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         }
       }
 
-      // Costo = cap059_costo × tot059 + cap60_costo × count_60
+      // Costo = SUMPRODUCT(costoTot_por_cat × conteos_del_plan)
       const ctr=costoTotRowIdxs[pi];
       const costoFallback=+res.bd.totalCosto.toFixed(2);
       pF(CC.costo,row,
-        `${ea(9,ctr)}*${ea(9,rango059DataRowIdx)}+${ea(10,ctr)}*${ea(5,distTotalRowIdx)}`,
+        `SUMPRODUCT(${ea(1,ctr)}:${ea(8,ctr)},${ea(1,pd)}:${ea(8,pd)})`,
         costoFallback,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_MONEY2);
 
-      // C/F = costo / fact
-      pF(CC.cf,row,`${ea(CC.costo,row)}/${ea(CC.omintFac,row)}`,
+      // C/F
+      pF(CC.cf,row,`IF(${ea(CC.omintFac,row)}=0,0,${ea(CC.costo,row)}/${ea(CC.omintFac,row)})`,
         res.bd.totalFac>0?+(res.bd.totalCosto/res.bd.totalFac).toFixed(4):0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
 
       cotPlanRowIdxs.push(row);
@@ -469,7 +473,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       }
     }
     pF(CC.costo,row,`SUM(${ea(CC.costo,cotPlanFirstRow)}:${ea(CC.costo,cotPlanLastRow)})`,+totalCosto.toFixed(2),fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
-    pF(CC.cf,row,`${ea(CC.costo,cotTotalRowIdx)}/${ea(CC.omintFac,cotTotalRowIdx)}`,totalFac>0?+(totalCosto/totalFac).toFixed(4):0,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
+    pF(CC.cf,row,`IF(${ea(CC.omintFac,cotTotalRowIdx)}=0,0,${ea(CC.costo,cotTotalRowIdx)}/${ea(CC.omintFac,cotTotalRowIdx)})`,totalFac>0?+(totalCosto/totalFac).toFixed(4):0,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
     row++;
 
     // Masa salarial / aporte
@@ -518,11 +522,12 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const bpr=basePriceRowIdxs[pi];
       const adj=adjRowIdxs[pi];
       p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
-      // Reference base price cells
-      [1,2,3,4,5].forEach(ci=>pF(ci,row,`+${ea(ci,bpr)}`,res.bd.rows.find(x=>x.id===CAT_KEYS[ci-1])?.precio||0,fNorm,null,aC,BORDER_ALL,NF_MONEY));
-      pF(7,row,`+${ea(7,bpr)}`,res.bd.rows.find(x=>x.id==="h1")?.precio||0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(8,row,`+${ea(8,bpr)}`,res.bd.rows.find(x=>x.id==="h2plus")?.precio||0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      // Cap prices reference adj row
+      // Individual category prices with adjustment applied
+      [1,2,3,4].forEach(ci=>pF(ci,row,`${ea(ci,bpr)}*(1+${ea(1,adj)})`,res.bd.rows.find(x=>x.id===CAT_KEYS[ci-1])?.precio||0,fNorm,null,aC,BORDER_ALL,NF_MONEY));
+      pF(5,row,`${ea(5,bpr)}*(1+${ea(2,adj)})`,res.bd.rows.find(x=>x.id==="s60plus")?.precio||0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(7,row,`${ea(7,bpr)}*(1+${ea(1,adj)})`,res.bd.rows.find(x=>x.id==="h1")?.precio||0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(8,row,`${ea(8,bpr)}*(1+${ea(1,adj)})`,res.bd.rows.find(x=>x.id==="h2plus")?.precio||0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      // Capitado prices reference adj row
       pF(9,row,`+${ea(3,adj)}`,0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
       pF(10,row,`+${ea(4,adj)}`,0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
       pF(11,row,`+${ea(5,adj)}`,0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
