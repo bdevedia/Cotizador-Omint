@@ -124,7 +124,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
         if(result.rows.length===0){setNomErrors([{tipo:"error",msg:"El archivo no tiene filas de datos. Revisá que tenga al menos una fila de empleados."}]);setEmps(null);return;}
         setEmps(result.rows);
         setCols(Object.keys(result.rows[0]));
-        setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
+        setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
         const info=`✓ ${result.rows.length} familias cargadas (${result.totalRaw} filas procesadas${result.filasIgnoradas>0?`, ${result.filasIgnoradas} ignoradas`:""})`;
         setNomErrors([{tipo:"info",msg:info}]);
         if(result.conyugesMultiples&&result.conyugesMultiples.length>0){

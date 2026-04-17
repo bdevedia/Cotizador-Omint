@@ -91,7 +91,7 @@ function parseNominaFija(rawRows,rawCols){
     const nombre=colNombre?String(row[colNombre]||"").trim():"";
     if(!familias[gid])familias[gid]={GRUPO:gid,NOMBRE:nombre,EDAD_TITULAR:null,
       CONYUGES:[],  // lista de TODAS las edades de conyuges
-      HIJOS_MENORES_25:0,HIJOS_MAYORES_25:0,PLAN_ACTUAL:"",ZONA:zona,
+      HIJOS_MENORES_25:0,HIJOS_MAYORES_25_EDADES:[],PLAN_ACTUAL:"",ZONA:zona,
       OSDE_HIJO_26_27:0,OSDE_IND_JOVEN:0,OSDE_IND_MAYOR:0};
     if(tipo==="T"){
       if(edad!==null)familias[gid].EDAD_TITULAR=edad;
@@ -104,7 +104,7 @@ function parseNominaFija(rawRows,rawCols){
     }else if(tipo==="H"){
       if(edad!==null){
         if(edad<=25)familias[gid].HIJOS_MENORES_25++;
-        else familias[gid].HIJOS_MAYORES_25++;
+        else familias[gid].HIJOS_MAYORES_25_EDADES.push(edad);
         // OSDE usa 28 como corte: <28 = hijo, >=28 = individual
         if(edad<28){
           if(edad>25)familias[gid].OSDE_HIJO_26_27++; // 26-27: FAC en Omint, hijo en OSDE
@@ -130,7 +130,7 @@ function parseNominaFija(rawRows,rawCols){
       EDAD_TITULAR:f.EDAD_TITULAR,
       EDAD_CONYUGE:primerConyuge,
       HIJOS_MENORES_25:f.HIJOS_MENORES_25,
-      HIJOS_MAYORES_25:f.HIJOS_MAYORES_25,
+      HIJOS_MAYORES_25_EDADES:f.HIJOS_MAYORES_25_EDADES,
       PLAN_ACTUAL:f.PLAN_ACTUAL,ZONA:f.ZONA,
       OSDE_HIJO_26_27:f.OSDE_HIJO_26_27,
       OSDE_IND_JOVEN:f.OSDE_IND_JOVEN,

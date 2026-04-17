@@ -9,7 +9,10 @@ function calcBD(emps,map,prices,costos){
     const ta=parseInt(e[map.titAge]);if(!isNaN(ta)){c[catAge(ta)]++;validTits++;}
     if(map.spAge){const sa=parseInt(e[map.spAge]);if(!isNaN(sa)&&sa>0)c[catAge(sa)]++;}
     const ku=parseInt(e[map.ku])||0;if(ku>=1)c.h1++;if(ku>=2)c.h2plus+=(ku-1);
-    const k25=map.k25?(parseInt(e[map.k25])||0):0;if(k25>0)c.s0_25+=k25;
+    // Hijos >25: cada uno cuenta en su categoría de edad (FAC)
+    const facEdades=map.k25?e[map.k25]:null;
+    if(Array.isArray(facEdades)){facEdades.forEach(edad=>{c[catAge(edad)]++;});}
+    else if(facEdades){const n=parseInt(facEdades)||0;if(n>0)c.s0_25+=n;} // fallback legacy
   });
   const rows=CATS.map(x=>{
     const n=c[x.id],pr=prices[x.id]||0,ct=costos[x.id]||0;
