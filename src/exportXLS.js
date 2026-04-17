@@ -371,8 +371,6 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     });
 
     // ── Retroalimentar costos capitados J/K/L (SUMPRODUCT sobre fila ya escrita) ──
-    const dP=distPctRowIdx;
-    const rP=rango059PctRowIdx;
     zResults.forEach((res,pi)=>{
       const ctr=costoTotRowIdxs[pi];
       const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
