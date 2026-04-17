@@ -285,7 +285,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       [getC("s0_25"),getC("s26_34"),getC("s35_54"),getC("s55_59"),getC("s60plus")].forEach((v,i)=>p(i+1,row,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
       p(7,row,+getC("h1").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       p(8,row,+getC("h2plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-
+      // J/K/L placeholder — sobreescrito con SUMPRODUCT post-loop
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
@@ -293,6 +293,19 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       p(10,row,+costo60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       p(11,row,+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       row++;
+    });
+
+    // ── Retroalimentar costos EE capitados J/K/L ─────────────────────────────
+    costoEERowIdxs.forEach((eer,pi)=>{
+      const getC=id=>zResults[pi].bd.rows.find(x=>x.id===id)?.costo||0;
+      const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
+      const costo60=getC("s60plus");
+      const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
+      const cols059=[1,2,3,4,7,8];
+      const colsAll=[1,2,3,4,5,7,8];
+      pF(9,eer,cols059.map(ci=>`${ea(ci,eer)}*${ea(ci,rP)}`).join("+"),+costo059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(10,eer,`+${ea(5,eer)}`,+costo60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(11,eer,colsAll.map(ci=>`${ea(ci,eer)}*${ea(ci,dP)}`).join("+"),+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
     });
 
     row++;
