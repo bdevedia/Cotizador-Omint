@@ -80,6 +80,7 @@ function parseNominaFija(rawRows,rawCols){
 
   const familias={};
   let filasIgnoradas=0;
+  const hijosEdadInvalida=[];
   rawRows.forEach(row=>{
     if(!row||row[colGrupo]==null)return;
     const gid=String(row[colGrupo]).trim();
@@ -102,7 +103,8 @@ function parseNominaFija(rawRows,rawCols){
       // Guardar TODOS los conyuges (puede haber duplicados en el archivo)
       if(edad!==null)familias[gid].CONYUGES.push(edad);
     }else if(tipo==="H"){
-      if(edad!==null){
+      if(edad===null){filasIgnoradas++;hijosEdadInvalida.push(gid);return;}
+      if(true){
         if(edad<=25)familias[gid].HIJOS_MENORES_25++;
         else familias[gid].HIJOS_MAYORES_25_EDADES.push(edad);
         // OSDE usa 28 como corte: <28 = hijo, >=28 = individual
@@ -139,7 +141,7 @@ function parseNominaFija(rawRows,rawCols){
   });
 
   if(rows.length===0)return{error:"No se encontraron titulares con edad válida. Revisá el template."};
-  return{rows,filasIgnoradas,conyugesMultiples,totalRaw:rawRows.length};
+  return{rows,filasIgnoradas,conyugesMultiples,hijosEdadInvalida,totalRaw:rawRows.length};
 }
 
 // ── PARSERS ───────────────────────────────────────────────────────────────────

@@ -126,7 +126,12 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
         setCols(Object.keys(result.rows[0]));
         setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
         const info=`✓ ${result.rows.length} familias cargadas (${result.totalRaw} filas procesadas${result.filasIgnoradas>0?`, ${result.filasIgnoradas} ignoradas`:""})`;
-        setNomErrors([{tipo:"info",msg:info}]);
+        const warns=[];
+        if(result.hijosEdadInvalida&&result.hijosEdadInvalida.length>0){
+          const n=result.hijosEdadInvalida.length;
+          warns.push({tipo:"warning",msg:`${n} hijo${n>1?"s":""} sin edad válida en el archivo (no incluido${n>1?"s":""} en el cálculo). Grupos: ${[...new Set(result.hijosEdadInvalida)].join(", ")}`});
+        }
+        setNomErrors([{tipo:"info",msg:info},...warns]);
         if(result.conyugesMultiples&&result.conyugesMultiples.length>0){
           setSpouseWarning({count:result.conyugesMultiples.length,familias:result.conyugesMultiples.map(x=>x.familia)});
         }else{setSpouseWarning(null);}
