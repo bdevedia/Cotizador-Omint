@@ -64,9 +64,15 @@ function parseNominaFija(rawRows,rawCols){
   function getEdad(row){
     if(colEdad){
       const v=parseInt(row[colEdad]);
-      if(!isNaN(v)&&v>0&&v<120)return v;
+      if(!isNaN(v)&&v<120){
+        if(v===0)return 1; // menos de 1 año → tratamos como 1
+        if(v>0)return v;
+      }
     }
-    if(colFecha)return calcEdadDesde(row[colFecha]);
+    if(colFecha){
+      const e=calcEdadDesde(row[colFecha]);
+      return e===0?1:e; // recién nacido → 1
+    }
     return null;
   }
 
