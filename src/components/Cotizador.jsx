@@ -37,6 +37,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const [compareOsde,setCompareOsde]=useState(false);
   const [planMappingOsde,setPlanMappingOsde]=useState({});
   const [planMejoras,setPlanMejoras]=useState({});
+  const [planCustomNames,setPlanCustomNames]=useState({});
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
@@ -251,7 +252,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
   const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo"},{n:3,l:"Comisión"},{n:4,l:"Cotización"}];
 
   return(<div>
-    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}}/>}
+    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}} planCustomNames={planCustomNames}/>}
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
       {sDef.map((s,i)=>(<Fragment key={s.n}>
@@ -570,14 +571,26 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       {results.map(r=>{
         const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
         return(<div key={r.adjKey} style={{...card(),marginBottom:"1.5rem"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
-            <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
-            <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planId}</span>
-            <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios · banda 200-499</span>
-            {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
-            <span style={{marginLeft:"auto",...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
-            {(adjPrices[r.adjKey]||adjCostos[r.adjKey])&&<button onClick={()=>{setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjCostos(prev=>{const n={...prev};delete n[r.adjKey];return n;});}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid #DC2626`,background:"#FEF2F2",color:"#DC2626",cursor:"pointer",fontFamily:FONT,fontWeight:500}}>↺ Restaurar</button>}
-          </div>
+          {(()=>{
+            const hasMej=MEJORAS_DEF.some(m=>planMejoras[r.adjKey]?.[m.id]);
+            return(<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
+              <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
+              <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planId}</span>
+              <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios · banda 200-499</span>
+              {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
+              <span style={{marginLeft:"auto",...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
+              {(adjPrices[r.adjKey]||adjCostos[r.adjKey])&&<button onClick={()=>{setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjCostos(prev=>{const n={...prev};delete n[r.adjKey];return n;});}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid #DC2626`,background:"#FEF2F2",color:"#DC2626",cursor:"pointer",fontFamily:FONT,fontWeight:500}}>↺ Restaurar</button>}
+              {hasMej&&<div style={{display:"flex",alignItems:"center",gap:6,width:"100%",marginTop:4}}>
+                <span style={{fontSize:11,color:"#166534",fontFamily:FONT,fontWeight:600,whiteSpace:"nowrap"}}>Nombre del plan cotizado:</span>
+                <input
+                  value={planCustomNames[r.adjKey]??r.planId}
+                  onChange={e=>setPlanCustomNames(prev=>({...prev,[r.adjKey]:e.target.value}))}
+                  placeholder={r.planId}
+                  style={{flex:1,fontSize:12,padding:"4px 8px",border:"1.5px solid #BBF7D0",borderRadius:6,fontFamily:FONT,background:"#F0FDF4",color:"#166534",outline:"none",maxWidth:320}}
+                />
+              </div>}
+            </div>);
+          })()}
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:660}}>
               <thead><tr>

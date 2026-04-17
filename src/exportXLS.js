@@ -3,7 +3,8 @@ import { CATS, CAT_IDS, ZONA_IDS, MEJORAS_DEF } from "./constants";
 import { calcOsdeFromEmps } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
-function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap){
+function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap,planesNombres){
+  const planLabel=res=>(planesNombres||{})[res.adjKey]||res.planId;
   const today=new Date().toLocaleDateString("es-AR");
   const mes=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date().getMonth()];
   const mesAno=`${mes.charAt(0).toUpperCase()+mes.slice(1)} ${new Date().getFullYear()}`;
@@ -92,7 +93,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
     const distPlanFirstRow=row;
     zResults.forEach((res,pi)=>{
-      p(0,row,res.planId,fBOLD,FILL_GRAY,aC,BORDER_ALL);
+      p(0,row,planLabel(res),fBOLD,FILL_GRAY,aC,BORDER_ALL);
       let planTot=0;
       CAT_KEYS.forEach((k,ci)=>{
         if(k==null)return;
@@ -177,7 +178,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const pf=planFill(pi);
       const getP=id=>res.bd.rows.find(x=>x.id===id)?.precio||0;
       const adj=adjRowIdxs[pi];
-      p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
+      p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       [getP("s0_25"),getP("s26_34"),getP("s35_54"),getP("s55_59")].forEach((v,i)=>
         pF(i+1,row,`${+v.toFixed(0)}*(1+${ea(1,adj)})`,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
       pF(5,row,`${+getP("s60plus").toFixed(0)}*(1+${ea(2,adj)})`,+getP("s60plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
@@ -214,7 +215,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const bpr=basePriceRowIdxs[pi];
       const adj=adjRowIdxs[pi];
 
-      p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
+      p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       p(1,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 0-59 (editable)
       p(2,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 60+ (editable)
 
@@ -279,7 +280,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     zResults.forEach((res,pi)=>{
       const pf=planFill(pi);
       costoEERowIdxs.push(row);
-      p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
+      p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
       [getC("s0_25"),getC("s26_34"),getC("s35_54"),getC("s55_59"),getC("s60plus")].forEach((v,i)=>p(i+1,row,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
       p(7,row,+getC("h1").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
@@ -308,7 +309,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     const mejoraRowIdxs=[];
     zResults.forEach((res,pi)=>{
       mejoraRowIdxs.push(row);
-      p(0,row,res.planId,fBOLD,planFill(pi),aC,BORDER_ALL);
+      p(0,row,planLabel(res),fBOLD,planFill(pi),aC,BORDER_ALL);
       const mejSel=(planMejorasMap||{})[res.adjKey]||{};
       [1,2,3,4,5,7,8].forEach(ci=>{
         const catKey=CAT_KEYS[CAT_COLS.indexOf(ci)];
@@ -353,7 +354,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const mer=mejoraRowIdxs[pi];
       const ctr=row;
       costoTotRowIdxs.push(ctr);
-      p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
+      p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
       const brokerFactor=`(1+${brokerCellRef})`;
       // Each cat = (costoEE + mejora) × (1 + comisión)
@@ -423,11 +424,11 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       totalOsdeAllPlans+=osdeFac;
       const vsOsde=osdeFac>0&&res.bd.totalFac>0?res.bd.totalFac/osdeFac-1:null;
 
-      p(CC.plan,row,res.planId,fBOLD,FILL_GRAY,aC,BORDER_ALL);
+      p(CC.plan,row,planLabel(res),fBOLD,FILL_GRAY,aC,BORDER_ALL);
       if(hasOsde){
         p(CC.osdeFac,row,osdeFac>0?+osdeFac.toFixed(2):null,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_MONEY2);
       }
-      p(CC.omintPlan,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
+      p(CC.omintPlan,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
 
       // Fact. Omint = SUMPRODUCT(precios_ajustados_por_cat × conteos_del_plan)
       // = (059_cats × adj1 + 60+ × adj2) por los conteos de este plan
@@ -528,7 +529,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const pf=planFill(pi);
       const bpr=basePriceRowIdxs[pi];
       const adj=adjRowIdxs[pi];
-      p(0,row,res.planId,fBOLD,pf,aC,BORDER_ALL);
+      p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       // Precios individuales = referencia directa a bpr (que ya tiene ajuste aplicado)
       [1,2,3,4,5,7,8].forEach(ci=>pF(ci,row,`+${ea(ci,bpr)}`,0,fNorm,null,aC,BORDER_ALL,NF_MONEY));
       // Capitado prices reference adj row

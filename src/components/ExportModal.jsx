@@ -6,13 +6,13 @@ import { generateProposalHTML } from "../exportHTML";
 import { exportAnalisisXLS } from "../exportXLS";
 
 // ── MODAL EXPORTAR ────────────────────────────────────────────────────────────
-function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMappingOsde,planMejoras,mejoras}){
+function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMappingOsde,planMejoras,mejoras,planCustomNames}){
   const [cfg,setCfg]=useState({
     empresa:empresa||"",
     fecha:new Date().toISOString().split("T")[0],
     validez:"La propuesta tiene validez por 30 días.",
     formato:"completo",
-    planesNombres:Object.fromEntries(results.map(r=>[r.adjKey,r.planId])),
+    planesNombres:Object.fromEntries(results.map(r=>[r.adjKey,(planCustomNames||{})[r.adjKey]||r.planId])),
     textoExtra:"",
     masaSalarial:"",
   });
@@ -87,7 +87,7 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMapping
           </div>
           <div style={{display:"flex",gap:10,marginTop:"0.5rem"}}>
             <button onClick={exportPDF} style={{...btnP,flex:1}}>📄 Exportar PDF</button>
-            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef,brokerPct,osde,planMappingOsde,cfg.masaSalarial,mejoras,planMejoras);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel</button>
+            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef,brokerPct,osde,planMappingOsde,cfg.masaSalarial,mejoras,planMejoras,cfg.planesNombres);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel</button>
           </div>
           <p style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT,textAlign:"center"}}>El PDF se abre en una nueva pestaña → usá Ctrl+P o Cmd+P para guardar como PDF</p>
         </div>
