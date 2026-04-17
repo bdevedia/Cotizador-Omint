@@ -577,6 +577,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
               <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
               <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planId}</span>
               <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios · banda 200-499</span>
+              {r.bd.skipped>0&&<span style={{fontSize:11,color:"#DC2626",fontFamily:FONT,fontWeight:600}}>⚠ {r.bd.skipped} fila{r.bd.skipped>1?"s":""} sin edad válida (no incluida{r.bd.skipped>1?"s":""})</span>}
               {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
               <span style={{marginLeft:"auto",...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
               {(adjPrices[r.adjKey]||adjCostos[r.adjKey])&&<button onClick={()=>{setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjCostos(prev=>{const n={...prev};delete n[r.adjKey];return n;});}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid #DC2626`,background:"#FEF2F2",color:"#DC2626",cursor:"pointer",fontFamily:FONT,fontWeight:500}}>↺ Restaurar</button>}

@@ -4,8 +4,9 @@ import { catAge, planTier } from "./utils";
 // ── CALC BD ───────────────────────────────────────────────────────────────────
 function calcBD(emps,map,prices,costos){
   const c={...EMPTY_CATS};
+  let validTits=0;
   emps.forEach(e=>{
-    const ta=parseInt(e[map.titAge]);if(!isNaN(ta))c[catAge(ta)]++;
+    const ta=parseInt(e[map.titAge]);if(!isNaN(ta)){c[catAge(ta)]++;validTits++;}
     if(map.spAge){const sa=parseInt(e[map.spAge]);if(!isNaN(sa)&&sa>0)c[catAge(sa)]++;}
     const ku=parseInt(e[map.ku])||0;if(ku>=1)c.h1++;if(ku>=2)c.h2plus+=(ku-1);
     const k25=map.k25?(parseInt(e[map.k25])||0):0;if(k25>0)c.s0_25+=k25;
@@ -16,7 +17,8 @@ function calcBD(emps,map,prices,costos){
     return{...x,count:n,precio:pr,costo:ct,fac,cos,cf};
   });
   const tf=rows.reduce((a,r)=>a+r.fac,0),tc=rows.reduce((a,r)=>a+r.cos,0);
-  return{rows,totalFac:tf,totalCosto:tc,cfTotal:tf>0?tc/tf*100:0,totalSocios:emps.length};
+  const skipped=emps.length-validTits;
+  return{rows,totalFac:tf,totalCosto:tc,cfTotal:tf>0?tc/tf*100:0,totalSocios:emps.length,skipped};
 }
 
 // ── OSDE COMPARISON ───────────────────────────────────────────────────────────
