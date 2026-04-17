@@ -101,7 +101,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         planTot+=cnt;
         p(CAT_COLS[ci],row,cnt,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_INT);
       });
-      pF(9,row,`${ea(1,row)}+${ea(2,row)}+${ea(3,row)}+${ea(4,row)}+${ea(7,row)}+${ea(8,row)}`,planTot,fBOLD,FILL_GRAY,aC,BORDER_ALL,NF_INT);
+      pF(9,row,`${ea(1,row)}+${ea(2,row)}+${ea(3,row)}+${ea(4,row)}+${ea(5,row)}+${ea(7,row)}+${ea(8,row)}`,planTot,fBOLD,FILL_GRAY,aC,BORDER_ALL,NF_INT);
       row++;
     });
     const distPlanLastRow=row-1;
