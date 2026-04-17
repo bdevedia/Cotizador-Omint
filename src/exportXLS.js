@@ -363,20 +363,25 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         const baseVal=+(getC(key||"s0_25")||0).toFixed(0);
         pF(ci,row,`(${ea(ci,eer)}+${ea(ci,mer)})*${brokerFactor}`,baseVal,fNorm,null,aC,BORDER_ALL,NF_MONEY);
       });
+      // J/K/L placeholder — se sobreescribe con SUMPRODUCT luego del loop (mismo patrón que C/F)
+      p(9,row,0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      p(10,row,0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      p(11,row,0,fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      row++;
+    });
 
-      // Capitado — referencian eer/mer directamente (evita same-row formula issue con xlsx-js-style)
-      const dP=distPctRowIdx;
-      const rP=rango059PctRowIdx;
-      const BF=`(1+${brokerCellRef})`;
-      const cat059=[1,2,3,4,7,8]; // cols 0-59 (excluye 5=60+, 6=gap)
-      const catAll=[1,2,3,4,5,7,8];
+    // ── Retroalimentar costos capitados J/K/L (SUMPRODUCT sobre fila ya escrita) ──
+    const dP=distPctRowIdx;
+    const rP=rango059PctRowIdx;
+    zResults.forEach((res,pi)=>{
+      const ctr=costoTotRowIdxs[pi];
+      const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
-      pF(9,row,cat059.map(ci=>`(${ea(ci,eer)}+${ea(ci,mer)})*${BF}*${ea(ci,rP)}`).join("+"),+costo059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(10,row,`(${ea(5,eer)}+${ea(5,mer)})*${BF}`,+costo60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(11,row,catAll.map(ci=>`(${ea(ci,eer)}+${ea(ci,mer)})*${BF}*${ea(ci,dP)}`).join("+"),+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      row++;
+      pF(9,ctr,`SUMPRODUCT(${ea(1,ctr)}:${ea(8,ctr)},${ea(1,rP)}:${ea(8,rP)})`,+costo059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(10,ctr,`+${ea(5,ctr)}`,+costo60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(11,ctr,`SUMPRODUCT(${ea(1,ctr)}:${ea(8,ctr)},${ea(1,dP)}:${ea(8,dP)})`,+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
     });
 
     // ── Retroalimentar C/F en sec 3 (ahora que tenemos costoTotRowIdxs) ──────
