@@ -35,11 +35,7 @@ export async function dbGet(key, def = null) {
 
 export async function dbSet(key, value) {
   if (!db) return;
-  try {
-    await set(ref(db, key), value);
-  } catch (e) {
-    console.warn("Firebase write error:", e);
-  }
+  await set(ref(db, key), value);
 }
 
 export function dbSubscribe(key, callback) {
