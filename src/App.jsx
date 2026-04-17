@@ -48,6 +48,8 @@ function App(){
   function saveOsde(o){setOsde(o);lsSet("omint-osde",o);dbSet("osde",o);}
   function saveQuote(q){const nq=[q,...quotes];setQuotes(nq);lsSet("omint-quotes",nq);}
   function updQuote(id,upd){const nq=quotes.map(q=>q.id===id?{...q,...upd}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
+  function deleteQuote(id){const nq=quotes.filter(q=>q.id!==id);setQuotes(nq);lsSet("omint-quotes",nq);}
+  function renameEmpresa(oldName,newName){const nq=quotes.map(q=>q.empresa===oldName?{...q,empresa:newName}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
   function saveApiKey(k){setApiKey(k);lsSet("omint-apikey",k);}
 
   const knownEmpresas=[...new Set(quotes.map(q=>q.empresa).filter(Boolean))];
@@ -93,7 +95,7 @@ function App(){
       {loaded&&sec==="costos"&&<CostosVigentes costos={costos} onSave={saveCos}/>}
       {loaded&&sec==="mejoras"&&<MejorasVigentes mejoras={mejoras||{}} onSave={saveMejoras}/>}
       {loaded&&sec==="osde"&&<OsdeVigentes osde={osde||{}} onSave={saveOsde}/>}
-      {loaded&&sec==="historial"&&<Historial quotes={quotes} onUpdate={updQuote}/>}
+      {loaded&&sec==="historial"&&<Historial quotes={quotes} onUpdate={updQuote} onDelete={deleteQuote} onRenameEmpresa={renameEmpresa}/>}
       {loaded&&sec==="config"&&<Configuracion apiKey={apiKey} onSave={saveApiKey}/>}
     </div>
   </div>);
