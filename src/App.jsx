@@ -27,29 +27,43 @@ function App(){
 
   useEffect(()=>{
     (async()=>{
-      const p=await dbGet("precios",lsGet("omint-precios",{}));
-      const c=await dbGet("costos",lsGet("omint-costos",{}));
-      const o=await dbGet("osde",lsGet("omint-osde",{}));
-      const mej=await dbGet("mejoras",lsGet("omint-mejoras",{}));
-      setPrecios(p);setCostos(c);setOsde(o);setMejoras(mej);
-      setQuotes(lsGet("omint-quotes",[]));setApiKey(lsGet("omint-apikey",""));
+      // Helper: load from Firebase; if missing, migrate from localStorage → Firebase
+      async function loadSync(fbKey,lsKey,setter,def={}){
+        const fbVal=await dbGet(fbKey,null);
+        if(fbVal!==null){setter(fbVal);lsSet(lsKey,fbVal);}
+        else{const lsVal=lsGet(lsKey,def);setter(lsVal);if(JSON.stringify(lsVal)!==JSON.stringify(def))dbSet(fbKey,lsVal);}
+      }
+      // Quotes: Firebase stores arrays as numeric-keyed objects → normalise
+      const fbQ=await dbGet("quotes",null);
+      if(fbQ!==null){const arr=Array.isArray(fbQ)?fbQ:Object.values(fbQ);setQuotes(arr);lsSet("omint-quotes",arr);}
+      else{const lsQ=lsGet("omint-quotes",[]);setQuotes(lsQ);if(lsQ.length>0)dbSet("quotes",lsQ);}
+
+      await Promise.all([
+        loadSync("precios","omint-precios",setPrecios),
+        loadSync("costos","omint-costos",setCostos),
+        loadSync("osde","omint-osde",setOsde),
+        loadSync("mejoras","omint-mejoras",setMejoras),
+      ]);
+      setApiKey(lsGet("omint-apikey",""));
       setLoaded(true);
-      // Suscribir actualizaciones en tiempo real
-      dbSubscribe("precios",v=>{setPrecios(v||{});});
-      dbSubscribe("costos",v=>{setCostos(v||{});});
-      dbSubscribe("osde",v=>{setOsde(v||{});});
-      dbSubscribe("mejoras",v=>{setMejoras(v||{});});
+      // Suscribir actualizaciones en tiempo real (también actualizan localStorage)
+      dbSubscribe("precios",v=>{setPrecios(v||{});lsSet("omint-precios",v||{});});
+      dbSubscribe("costos",v=>{setCostos(v||{});lsSet("omint-costos",v||{});});
+      dbSubscribe("osde",v=>{setOsde(v||{});lsSet("omint-osde",v||{});});
+      dbSubscribe("mejoras",v=>{setMejoras(v||{});lsSet("omint-mejoras",v||{});});
+      dbSubscribe("quotes",v=>{if(!v)return;const arr=Array.isArray(v)?v:Object.values(v);setQuotes(arr);lsSet("omint-quotes",arr);});
     })();
   },[]);
 
-  async function savePre(p){setPrecios(p);lsSet("omint-precios",p);setSyncStatus("syncing");try{await dbSet("precios",p);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error (precios):",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
-  async function saveCos(c){setCostos(c);lsSet("omint-costos",c);setSyncStatus("syncing");try{await dbSet("costos",c);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error (costos):",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
-  async function saveMejoras(m){setMejoras(m);lsSet("omint-mejoras",m);setSyncStatus("syncing");try{await dbSet("mejoras",m);setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn(e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
-  function saveOsde(o){setOsde(o);lsSet("omint-osde",o);dbSet("osde",o);}
-  function saveQuote(q){const nq=[q,...quotes];setQuotes(nq);lsSet("omint-quotes",nq);}
-  function updQuote(id,upd){const nq=quotes.map(q=>q.id===id?{...q,...upd}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
-  function deleteQuote(id){const nq=quotes.filter(q=>q.id!==id);setQuotes(nq);lsSet("omint-quotes",nq);}
-  function renameEmpresa(oldName,newName){const nq=quotes.map(q=>q.empresa===oldName?{...q,empresa:newName}:q);setQuotes(nq);lsSet("omint-quotes",nq);}
+  async function sync(fn){setSyncStatus("syncing");try{await fn();setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error:",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
+  async function savePre(p){setPrecios(p);lsSet("omint-precios",p);sync(()=>dbSet("precios",p));}
+  async function saveCos(c){setCostos(c);lsSet("omint-costos",c);sync(()=>dbSet("costos",c));}
+  async function saveOsde(o){setOsde(o);lsSet("omint-osde",o);sync(()=>dbSet("osde",o));}
+  async function saveMejoras(m){setMejoras(m);lsSet("omint-mejoras",m);sync(()=>dbSet("mejoras",m));}
+  function saveQuote(q){const nq=[q,...quotes];setQuotes(nq);lsSet("omint-quotes",nq);sync(()=>dbSet("quotes",nq));}
+  function updQuote(id,upd){const nq=quotes.map(q=>q.id===id?{...q,...upd}:q);setQuotes(nq);lsSet("omint-quotes",nq);sync(()=>dbSet("quotes",nq));}
+  function deleteQuote(id){const nq=quotes.filter(q=>q.id!==id);setQuotes(nq);lsSet("omint-quotes",nq);sync(()=>dbSet("quotes",nq));}
+  function renameEmpresa(oldName,newName){const nq=quotes.map(q=>q.empresa===oldName?{...q,empresa:newName}:q);setQuotes(nq);lsSet("omint-quotes",nq);sync(()=>dbSet("quotes",nq));}
   function saveApiKey(k){setApiKey(k);lsSet("omint-apikey",k);}
 
   const knownEmpresas=[...new Set(quotes.map(q=>q.empresa).filter(Boolean))];
