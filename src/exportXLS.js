@@ -370,16 +370,22 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       row++;
     });
 
-    // ── Retroalimentar costos capitados J/K/L (SUMPRODUCT sobre fila ya escrita) ──
+    // ── Retroalimentar costos capitados J/K/L ────────────────────────────────
+    // Usamos referencias celda por celda (cols 1,2,3,4,7,8 = 0-59; col 5 = 60+)
+    // para evitar rango continuo con hueco en col 6 (G=gap)
     zResults.forEach((res,pi)=>{
       const ctr=costoTotRowIdxs[pi];
       const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
-      pF(9,ctr,`SUMPRODUCT(${ea(1,ctr)}:${ea(8,ctr)},${ea(1,rP)}:${ea(8,rP)})`,+costo059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      const cols059=[1,2,3,4,7,8];
+      const colsAll=[1,2,3,4,5,7,8];
+      const f059=cols059.map(ci=>`${ea(ci,ctr)}*${ea(ci,rP)}`).join("+");
+      const fAll=colsAll.map(ci=>`${ea(ci,ctr)}*${ea(ci,dP)}`).join("+");
+      pF(9,ctr,f059,+costo059.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       pF(10,ctr,`+${ea(5,ctr)}`,+costo60.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(11,ctr,`SUMPRODUCT(${ea(1,ctr)}:${ea(8,ctr)},${ea(1,dP)}:${ea(8,dP)})`,+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      pF(11,ctr,fAll,+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
     });
 
     // ── Retroalimentar C/F en sec 3 (ahora que tenemos costoTotRowIdxs) ──────
