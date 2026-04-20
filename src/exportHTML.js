@@ -15,6 +15,10 @@ function generateProposalHTML(cfg,results){
   // Colores de plan: dorado/ámbar como en los modelos
   const PLAN_BG=["#F5A100","#F5A100","#F5A100","#F5A100","#F5A100"];
 
+  // Deduplicar por plan Omint (planId) — igual que Excel: precios únicos por plan cotizado
+  const seen=new Set();
+  const uniqueResults=results.filter(r=>{if(seen.has(r.planId))return false;seen.add(r.planId);return true;});
+
   let tableHTML="";
 
   if(formato==="ponderado"){
@@ -28,7 +32,7 @@ function generateProposalHTML(cfg,results){
         </tr>
       </thead>
       <tbody>
-        ${results.map((r,i)=>{
+        ${uniqueResults.map((r,i)=>{
           const{precio0_59,precio60plus}=ponderado(r);
           const nombre=planesNombres[r.adjKey]||r.planId;
           return`<tr>
@@ -64,7 +68,7 @@ function generateProposalHTML(cfg,results){
         </tr>
       </thead>
       <tbody>
-        ${results.map((r,i)=>{
+        ${uniqueResults.map((r,i)=>{
           const nombre=planesNombres[r.adjKey]||r.planId;
           return`<tr>
             <td style="background:${PLAN_BG[i%PLAN_BG.length]};padding:7px 10px;font-weight:bold;font-size:9pt;border:1px solid #ccc;text-align:center;">${nombre}</td>
