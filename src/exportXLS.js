@@ -455,14 +455,13 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       }
       p(CC.omintPlan,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
 
-      // Fact. Omint = SUMPRODUCT(precios_ajustados_por_cat × conteos_del_plan)
-      // = (059_cats × adj1 + 60+ × adj2) por los conteos de este plan
+      // Fact. Omint = SUMPRODUCT(precios ya ajustados × conteos del plan)
+      // bpr ya contiene precio_base*(1+adj), no hay que volver a multiplicar
       const bpr=basePriceRowIdxs[pi];
-      const adj=adjRowIdxs[pi];
       const pd=distPlanFirstRow+pi; // fila de distribución de este plan
       const factFallback=+res.bd.totalFac.toFixed(2);
       pF(CC.omintFac,row,
-        `(${ea(1,bpr)}*${ea(1,pd)}+${ea(2,bpr)}*${ea(2,pd)}+${ea(3,bpr)}*${ea(3,pd)}+${ea(4,bpr)}*${ea(4,pd)}+${ea(7,bpr)}*${ea(7,pd)}+${ea(8,bpr)}*${ea(8,pd)})*(1+${ea(1,adj)})+${ea(5,bpr)}*${ea(5,pd)}*(1+${ea(2,adj)})`,
+        `${ea(1,bpr)}*${ea(1,pd)}+${ea(2,bpr)}*${ea(2,pd)}+${ea(3,bpr)}*${ea(3,pd)}+${ea(4,bpr)}*${ea(4,pd)}+${ea(5,bpr)}*${ea(5,pd)}+${ea(7,bpr)}*${ea(7,pd)}+${ea(8,bpr)}*${ea(8,pd)}`,
         factFallback,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_MONEY2);
 
       if(hasOsde){
