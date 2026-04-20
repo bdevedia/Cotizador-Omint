@@ -176,7 +176,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     // ── Filas de precios (una por plan) ──
     zResults.forEach((res,pi)=>{
       const pf=planFill(pi);
-      const getP=id=>res.bd.rows.find(x=>x.id===id)?.precio||0;
+      const getP=id=>(res.basePreciosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.precio??0;
       const adj=adjRowIdxs[pi];
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       [getP("s0_25"),getP("s26_34"),getP("s35_54"),getP("s55_59")].forEach((v,i)=>
