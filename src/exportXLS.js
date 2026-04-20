@@ -94,7 +94,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
     const distPlanFirstRow=row;
     zResults.forEach((res,pi)=>{
-      p(0,row,planLabel(res),fBOLD,FILL_GRAY,aC,BORDER_ALL);
+      p(0,row,res.planVigente||res.planId,fBOLD,FILL_GRAY,aC,BORDER_ALL);
       let planTot=0;
       CAT_KEYS.forEach((k,ci)=>{
         if(k==null)return;
@@ -445,17 +445,18 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     const cotPlanRowIdxs=[];
     zResults.forEach((res,pi)=>{
       const pf=planFill(pi);
-      const mappedOsde=planMappingOsde?.[res.adjKey];
+      // OSDE mapping usa osdeKey (por plan vigente) para comparación correcta
+      const mappedOsde=planMappingOsde?.[res.osdeKey||res.adjKey];
       const osdeResult=mappedOsde&&osde?.[mappedOsde]?calcOsdeFromEmps(res.empList,osde[mappedOsde]):null;
       const osdeFac=osdeResult?osdeResult.total:0;
       totalOsdeAllPlans+=osdeFac;
       const vsOsde=osdeFac>0&&res.bd.totalFac>0?res.bd.totalFac/osdeFac-1:null;
 
-      p(CC.plan,row,planLabel(res),fBOLD,FILL_GRAY,aC,BORDER_ALL);
+      p(CC.plan,row,res.planVigente||res.planId,fBOLD,FILL_GRAY,aC,BORDER_ALL); // plan vigente
       if(hasOsde){
         p(CC.osdeFac,row,osdeFac>0?+osdeFac.toFixed(2):null,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_MONEY2);
       }
-      p(CC.omintPlan,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
+      p(CC.omintPlan,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL); // plan Omint
 
       // Fact. Omint = SUMPRODUCT(precios ya ajustados × conteos del plan)
       // bpr ya contiene precio_base*(1+adj), no hay que volver a multiplicar
