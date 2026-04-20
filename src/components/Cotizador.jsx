@@ -584,9 +584,9 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:"1rem",fontFamily:FONT}}>Resumen por zona y plan</p>
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:500}}>
           <thead><tr>{["Zona","Plan","Socios","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i<2?"left":"right"})}>{h}</th>)}</tr></thead>
-          <tbody>{results.map(r=>{const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};return(<tr key={r.adjKey}>
+          <tbody>{results.map(r=>{const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};return(<tr key={r.osdeKey}>
             <td style={TD()}><span style={{...badge(zc2.c,zc2.bg),fontSize:11}}>{r.zona}</span></td>
-            <td style={TD({fontWeight:600,color:BLUE})}>{r.planVigente}{r.planVigente!==r.planId&&<span style={{color:"#9CA3AF",fontWeight:400,fontSize:11}}> → {r.planId}</span>}</td>
+            <td style={TD({fontWeight:600,color:BLUE})}>{r.planId}{r.planVigente!==r.planId&&<span style={{color:"#9CA3AF",fontWeight:400,fontSize:11}}> ← {r.planVigente}</span>}</td>
             <td style={TD({textAlign:"right",color:"#6B7280"})}>{r.bd.totalSocios}</td>
             <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(r.bd.totalFac)}</td>
             <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(r.bd.totalCosto)}</td>
@@ -598,13 +598,13 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       {/* Desglose por grupo */}
       {results.map(r=>{
         const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
-        return(<div key={r.adjKey} style={{...card(),marginBottom:"1.5rem"}}>
+        return(<div key={r.osdeKey} style={{...card(),marginBottom:"1.5rem"}}>
           {(()=>{
             const hasMej=MEJORAS_DEF.some(m=>planMejoras[r.adjKey]?.[m.id]);
             return(<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
               <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
-              <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planVigente}</span>
-              {r.planVigente!==r.planId&&<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>→ {r.planId}</span>}
+              <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planId}</span>
+              {r.planVigente!==r.planId&&<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>← {r.planVigente}</span>}
               <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios · banda 200-499</span>
               {r.bd.skipped>0&&<span style={{fontSize:11,color:"#DC2626",fontFamily:FONT,fontWeight:600}}>⚠ {r.bd.skipped} fila{r.bd.skipped>1?"s":""} sin edad válida (no incluida{r.bd.skipped>1?"s":""})</span>}
               {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
