@@ -62,22 +62,24 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
     if(!emps||!map.titAge||!map.ku)return[];
     const gmap={};
     emps.forEach(e=>{
-      const zona=getEmpZona(e),planId=getEmpPlan(e);if(!planId)return;
-      const key=`${zona}||${planId}`;
-      if(!gmap[key])gmap[key]={zona,planId,empList:[],vigentePlans:{}};
+      const zona=getEmpZona(e);
+      if(!map.planCol||!e[map.planCol])return;
+      const ext=String(e[map.planCol]).trim();
+      const planId=isOmintPlan(ext)?ext:(planMapping[ext]||null);
+      if(!planId)return;
+      // Agrupar por plan VIGENTE: cada plan original tiene su propia distribución
+      const planVigente=ext;
+      const key=`${zona}||${planVigente}`;
+      if(!gmap[key])gmap[key]={zona,planVigente,planId,empList:[]};
       gmap[key].empList.push(e);
-      // Guardar sublista por plan vigente (para comparación OSDE por plan original)
-      const ext=map.planCol?String(e[map.planCol]||"").trim():"";
-      const vk=ext||planId;
-      if(!gmap[key].vigentePlans[vk])gmap[key].vigentePlans[vk]=[];
-      gmap[key].vigentePlans[vk].push(e);
     });
     return Object.values(gmap).sort((a,b)=>a.zona.localeCompare(b.zona)||planTier(a.planId)-planTier(b.planId));
   }
 
   function buildResults(){
     const brokerMult=1+(parseFloat(brokerPct)||0)/100;
-    return buildGroups().map(({zona,planId,empList,vigentePlans})=>{
+    return buildGroups().map(({zona,planId,planVigente,empList})=>{
+      // adjKey por plan OMINT: precios/costos/mejoras/ajustes se aplican al plan Omint asignado
       const adjKey=`${zona}||${planId}`;
       const basePrices=precios?.[zona]?.[planId]||{};
       const adjP=adjPrices[adjKey]||{};
@@ -98,12 +100,15 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
         return[c,(base+mejCost)*brokerMult];
       }));
       const bd=calcBD(empList,map,effPrices,effCostos);
-      const mapping=map.planCol?externalPlans.filter(p=>(planMapping[p]===planId)&&!isOmintPlan(p)).map(p=>({from:p,to:planId})):[];
+      // mapping: plan vigente → plan Omint (si son distintos)
+      const mapping=planVigente!==planId?[{from:planVigente,to:planId}]:[];
       // baseCostosXLS: costo sin mejoras ni comisión (para que Excel pueda desglosar correctamente)
       const baseCostosXLS=Object.fromEntries(CAT_IDS.map(c=>[c,adjC[c]!==undefined?adjC[c]:baseCostos[c]||0]));
       // basePreciosXLS: precio original sin ajuste IA (para que Excel aplique la fórmula *(1+adj) sin doble ajuste)
       const basePreciosXLS=Object.fromEntries(CAT_IDS.map(c=>[c,basePrices[c]||0]));
-      return{zona,planId,empList,vigentePlans,bd,mapping,adjKey,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0,baseCostosXLS,basePreciosXLS};
+      // osdeKey: clave para comparación OSDE (por plan vigente, no por plan Omint)
+      const osdeKey=`${zona}||${planVigente}`;
+      return{zona,planId,planVigente,empList,bd,mapping,adjKey,osdeKey,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0,baseCostosXLS,basePreciosXLS};
     });
   }
 
@@ -495,25 +500,11 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
             :(()=>{
               const osdePlans=Object.keys(osde||{}).sort();
               const rows=results.map(r=>{
-                const mappedPlan=planMappingOsde[r.adjKey]||"";
-                // Calcular OSDE por plan vigente: si hay múltiples planes vigentes mapeados a este plan Omint,
-                // cada uno usa su propio plan OSDE (guardado en planMappingOsde por adjKey del vigente)
-                let osdeResult=null;
-                if(mappedPlan&&(osde||{})[mappedPlan]){
-                  // Mapping manual único para todo el grupo
-                  osdeResult=calcOsdeFromEmps(r.empList,(osde||{})[mappedPlan]);
-                }else if(r.vigentePlans&&Object.keys(r.vigentePlans).length>1){
-                  // Múltiples planes vigentes: calcular OSDE para cada uno por separado y sumar
-                  let totalSum=0;let hasAny=false;
-                  Object.entries(r.vigentePlans).forEach(([vk,vEmps])=>{
-                    const vMapped=planMappingOsde[`${r.zona}||${vk}`]||((osde||{})[vk]?vk:"");
-                    if(vMapped&&(osde||{})[vMapped]){
-                      const sub=calcOsdeFromEmps(vEmps,(osde||{})[vMapped]);
-                      totalSum+=sub.total;hasAny=true;
-                    }
-                  });
-                  if(hasAny)osdeResult={total:totalSum};
-                }
+                // Usar osdeKey (por plan vigente) para el mapping OSDE
+                const storedPlan=planMappingOsde[r.osdeKey];
+                // Auto-detectar: si plan vigente coincide con un plan OSDE cargado, usarlo por defecto
+                const mappedPlan=storedPlan!=null?storedPlan:((osde||{})[r.planVigente]?r.planVigente:"");
+                const osdeResult=mappedPlan&&(osde||{})[mappedPlan]?calcOsdeFromEmps(r.empList,(osde||{})[mappedPlan]):null;
                 return{r,mappedPlan,osdeResult};
               });
               const totalOmint=rows.reduce((a,{r})=>a+r.bd.totalFac,0);
@@ -536,12 +527,13 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
                       const diff=osdeResult?osdeResult.total-r.bd.totalFac:null;
                       const pct=diff!==null&&r.bd.totalFac>0?diff/r.bd.totalFac*100:null;
                       const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
-                      return(<tr key={r.adjKey}>
+                      return(<tr key={r.osdeKey}>
                         <td style={TD({fontWeight:600})}>
-                          <span style={{...badge(zc2.c,zc2.bg),fontSize:10,marginRight:6}}>{r.zona}</span>{r.planId}
+                          <span style={{...badge(zc2.c,zc2.bg),fontSize:10,marginRight:6}}>{r.zona}</span>
+                          {r.planVigente}{r.planVigente!==r.planId&&<span style={{color:"#9CA3AF",fontWeight:400}}> → {r.planId}</span>}
                         </td>
                         <td style={TD()}>
-                          <select value={mappedPlan} onChange={e=>setPlanMappingOsde(p=>({...p,[r.adjKey]:e.target.value}))} style={{...inp,width:130,fontSize:12,padding:"4px 8px"}}>
+                          <select value={mappedPlan} onChange={e=>setPlanMappingOsde(p=>({...p,[r.osdeKey]:e.target.value}))} style={{...inp,width:130,fontSize:12,padding:"4px 8px"}}>
                             <option value="">—</option>
                             {osdePlans.map(p=><option key={p} value={p}>{p}</option>)}
                           </select>
@@ -594,7 +586,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           <thead><tr>{["Zona","Plan","Socios","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i<2?"left":"right"})}>{h}</th>)}</tr></thead>
           <tbody>{results.map(r=>{const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};return(<tr key={r.adjKey}>
             <td style={TD()}><span style={{...badge(zc2.c,zc2.bg),fontSize:11}}>{r.zona}</span></td>
-            <td style={TD({fontWeight:600,color:BLUE})}>{r.planId}</td>
+            <td style={TD({fontWeight:600,color:BLUE})}>{r.planVigente}{r.planVigente!==r.planId&&<span style={{color:"#9CA3AF",fontWeight:400,fontSize:11}}> → {r.planId}</span>}</td>
             <td style={TD({textAlign:"right",color:"#6B7280"})}>{r.bd.totalSocios}</td>
             <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(r.bd.totalFac)}</td>
             <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(r.bd.totalCosto)}</td>
@@ -611,7 +603,8 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
             const hasMej=MEJORAS_DEF.some(m=>planMejoras[r.adjKey]?.[m.id]);
             return(<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
               <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
-              <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planId}</span>
+              <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.planVigente}</span>
+              {r.planVigente!==r.planId&&<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>→ {r.planId}</span>}
               <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios · banda 200-499</span>
               {r.bd.skipped>0&&<span style={{fontSize:11,color:"#DC2626",fontFamily:FONT,fontWeight:600}}>⚠ {r.bd.skipped} fila{r.bd.skipped>1?"s":""} sin edad válida (no incluida{r.bd.skipped>1?"s":""})</span>}
               {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
