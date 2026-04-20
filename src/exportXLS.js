@@ -82,6 +82,10 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     const grandTotal=Object.values(distTot).reduce((a,b)=>a+b,0);
     const tot059=distTot.s0_25+distTot.s26_34+distTot.s35_54+distTot.s55_59+distTot.h1+distTot.h2plus;
 
+    // Planes Omint únicos (4500, 6500, 8500 — sin duplicados por plan vigente)
+    const uniqueOmint=[];
+    {const _seen=new Set();zResults.forEach(res=>{if(!_seen.has(res.planId)){_seen.add(res.planId);uniqueOmint.push(res);}});}
+
     // ── SECCIÓN 1: Distribución ──────────────────────────────────────────────
     p(0,row,`Distribución - ${zona}`,fWHITE,FILL_DARK_HEADER,aL,BORDER_ALL);
     merge(0,row,11,row); row++;
@@ -166,19 +170,21 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(8,row,"Hijo 2 o +",fBOLD,null,aC,BORDER_ALL);
     row++;
 
-    // Pre-calcular índices: precio rows primero, luego spacer + 2 headers de ajuste, luego ajuste rows
-    // Layout: [N price rows] [spacer] [ajuste_hdr1] [ajuste_hdr2] [N ajuste rows]
-    const N=zResults.length;
-    const basePriceRowIdxs=zResults.map((_,pi)=>row+pi);          // rows: row..row+N-1
-    const adjRowIdxs=zResults.map((_,pi)=>row+N+1+2+pi);          // rows: row+N+3..row+N+3+N-1
+    // Pre-calcular índices por plan Omint único
+    // Layout: [M price rows] [spacer] [ajuste_hdr1] [ajuste_hdr2] [M ajuste rows]
+    const M=uniqueOmint.length;
+    const basePriceRowMap={};
+    uniqueOmint.forEach((res,pi)=>{basePriceRowMap[res.planId]=row+pi;});
+    const adjRowMap={};
+    uniqueOmint.forEach((res,pi)=>{adjRowMap[res.planId]=row+M+1+2+pi;});
     const dP=distPctRowIdx;
     const rP=rango059PctRowIdx;
 
-    // ── Filas de precios (una por plan) ──
-    zResults.forEach((res,pi)=>{
+    // ── Filas de precios (una por plan Omint único) ──
+    uniqueOmint.forEach((res,pi)=>{
       const pf=planFill(pi);
       const getP=id=>(res.basePreciosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.precio??0;
-      const adj=adjRowIdxs[pi];
+      const adj=adjRowMap[res.planId];
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       [getP("s0_25"),getP("s26_34"),getP("s35_54"),getP("s55_59")].forEach((v,i)=>
         pF(i+1,row,`${+v.toFixed(0)}*(1+${ea(1,adj)})`,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
@@ -209,17 +215,17 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(11,row,"General",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     row++;
 
-    // ── Filas de ajuste (una por plan) ──
-    zResults.forEach((res,pi)=>{
+    // ── Filas de ajuste (una por plan Omint único) ──
+    uniqueOmint.forEach((res,pi)=>{
       const pf=planFill(pi);
       const getP=id=>res.bd.rows.find(x=>x.id===id)?.precio||0;
-      const bpr=basePriceRowIdxs[pi];
-      const adj=adjRowIdxs[pi];
+      const bpr=basePriceRowMap[res.planId];
+      const adj=adjRowMap[res.planId];
 
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const adjPctPlan=(adjPct||{})[res.adjKey]||{};
-      p(1,row,adjPctPlan.pct059||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 0-59 (editable)
-      p(2,row,adjPctPlan.pct60||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 60+ (editable)
+      p(1,row,adjPctPlan.pct059||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1);
+      p(2,row,adjPctPlan.pct60||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1);
 
       const precio059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getP(k)||0),0)/tot059:0;
       const precio60=getP("s60plus");
@@ -234,8 +240,8 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         p(7,row,"—",fNorm,FILL_GRAY,aC,BORDER_ALL);
         p(8,row,"—",fNorm,FILL_GRAY,aC,BORDER_ALL);
       } else {
-        const prevAdj=adjRowIdxs[pi-1];
-        const prev=zResults[pi-1];
+        const prevAdj=adjRowMap[uniqueOmint[pi-1].planId];
+        const prev=uniqueOmint[pi-1];
         const prevP059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(prev.bd.rows.find(x=>x.id===k)?.precio||0),0)/tot059:0;
         const prevP60=prev.bd.rows.find(x=>x.id==="s60plus")?.precio||0;
         const prevPGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(prev.bd.rows.find(x=>x.id===k)?.precio||0),0)/grandTotal:0;
@@ -244,7 +250,6 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
         pF(8,row,`${ea(5,adj)}/${ea(5,prevAdj)}-1`,prevPGen>0?precioGen/prevPGen-1:0,fNorm,FILL_GRAY,aC,BORDER_ALL,NF_PCT1);
       }
 
-      // C/F — se sobreescribe luego de sec 6
       p(9,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       p(10,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       p(11,row,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
@@ -278,16 +283,15 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(11,row,"General",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     row++;
 
-    const costoEERowIdxs=[];
-    zResults.forEach((res,pi)=>{
+    const costoEERowMap={};
+    uniqueOmint.forEach((res,pi)=>{
       const pf=planFill(pi);
-      costoEERowIdxs.push(row);
+      costoEERowMap[res.planId]=row;
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
       [getC("s0_25"),getC("s26_34"),getC("s35_54"),getC("s55_59"),getC("s60plus")].forEach((v,i)=>p(i+1,row,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
       p(7,row,+getC("h1").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       p(8,row,+getC("h2plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      // J/K/L placeholder — sobreescrito con SUMPRODUCT post-loop
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
@@ -298,8 +302,9 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     });
 
     // ── Retroalimentar costos EE capitados J/K/L ─────────────────────────────
-    costoEERowIdxs.forEach((eer,pi)=>{
-      const getC=id=>(zResults[pi].baseCostosXLS||{})[id]??zResults[pi].bd.rows.find(x=>x.id===id)?.costo??0;
+    uniqueOmint.forEach((res)=>{
+      const eer=costoEERowMap[res.planId];
+      const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
@@ -321,9 +326,9 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(8,row,"Hijo 2 o +",fBOLD,null,aC,BORDER_ALL);
     row++;
 
-    const mejoraRowIdxs=[];
-    zResults.forEach((res,pi)=>{
-      mejoraRowIdxs.push(row);
+    const mejoraRowMap={};
+    uniqueOmint.forEach((res,pi)=>{
+      mejoraRowMap[res.planId]=row;
       p(0,row,planLabel(res),fBOLD,planFill(pi),aC,BORDER_ALL);
       const mejSel=(planMejorasMap||{})[res.adjKey]||{};
       [1,2,3,4,5,7,8].forEach(ci=>{
@@ -362,13 +367,13 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(11,row,"General",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     row++;
 
-    const costoTotRowIdxs=[];
-    zResults.forEach((res,pi)=>{
+    const costoTotRowMap={};
+    uniqueOmint.forEach((res,pi)=>{
       const pf=planFill(pi);
-      const eer=costoEERowIdxs[pi];
-      const mer=mejoraRowIdxs[pi];
+      const eer=costoEERowMap[res.planId];
+      const mer=mejoraRowMap[res.planId];
       const ctr=row;
-      costoTotRowIdxs.push(ctr);
+      costoTotRowMap[res.planId]=ctr;
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
       const brokerFactor=`(1+${brokerCellRef})`;
@@ -386,10 +391,8 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     });
 
     // ── Retroalimentar costos capitados J/K/L ────────────────────────────────
-    // Usamos referencias celda por celda (cols 1,2,3,4,7,8 = 0-59; col 5 = 60+)
-    // para evitar rango continuo con hueco en col 6 (G=gap)
-    zResults.forEach((res,pi)=>{
-      const ctr=costoTotRowIdxs[pi];
+    uniqueOmint.forEach((res)=>{
+      const ctr=costoTotRowMap[res.planId];
       const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
@@ -403,10 +406,10 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       pF(11,ctr,fAll,+costoGen.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
     });
 
-    // ── Retroalimentar C/F en sec 3 (ahora que tenemos costoTotRowIdxs) ──────
-    zResults.forEach((_,pi)=>{
-      const adj=adjRowIdxs[pi];
-      const ctr=costoTotRowIdxs[pi];
+    // ── Retroalimentar C/F en sec 3 ─────────────────────────────────────────
+    uniqueOmint.forEach((res)=>{
+      const adj=adjRowMap[res.planId];
+      const ctr=costoTotRowMap[res.planId];
       pF(9,adj,`IF(${ea(3,adj)}=0,0,${ea(9,ctr)}/${ea(3,adj)})`,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       pF(10,adj,`IF(${ea(4,adj)}=0,0,${ea(10,ctr)}/${ea(4,adj)})`,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
       pF(11,adj,`IF(${ea(5,adj)}=0,0,${ea(11,ctr)}/${ea(5,adj)})`,0,fNorm,null,aC,BORDER_ALL,NF_PCT1);
@@ -459,9 +462,8 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       p(CC.omintPlan,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL); // plan Omint
 
       // Fact. Omint = SUMPRODUCT(precios ya ajustados × conteos del plan)
-      // bpr ya contiene precio_base*(1+adj), no hay que volver a multiplicar
-      const bpr=basePriceRowIdxs[pi];
-      const pd=distPlanFirstRow+pi; // fila de distribución de este plan
+      const bpr=basePriceRowMap[res.planId];
+      const pd=distPlanFirstRow+pi; // fila de distribución de este plan (por plan vigente)
       const factFallback=+res.bd.totalFac.toFixed(2);
       pF(CC.omintFac,row,
         `${ea(1,bpr)}*${ea(1,pd)}+${ea(2,bpr)}*${ea(2,pd)}+${ea(3,bpr)}*${ea(3,pd)}+${ea(4,bpr)}*${ea(4,pd)}+${ea(5,bpr)}*${ea(5,pd)}+${ea(7,bpr)}*${ea(7,pd)}+${ea(8,bpr)}*${ea(8,pd)}`,
@@ -476,7 +478,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       }
 
       // Costo = SUMPRODUCT(costoTot_por_cat × conteos_del_plan)
-      const ctr=costoTotRowIdxs[pi];
+      const ctr=costoTotRowMap[res.planId];
       const costoFallback=+res.bd.totalCosto.toFixed(2);
       pF(CC.costo,row,
         `SUMPRODUCT(${ea(1,ctr)}:${ea(8,ctr)},${ea(1,pd)}:${ea(8,pd)})`,
@@ -552,10 +554,10 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(11,row,"General",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     row++;
 
-    zResults.forEach((res,pi)=>{
+    uniqueOmint.forEach((res,pi)=>{
       const pf=planFill(pi);
-      const bpr=basePriceRowIdxs[pi];
-      const adj=adjRowIdxs[pi];
+      const bpr=basePriceRowMap[res.planId];
+      const adj=adjRowMap[res.planId];
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       // Precios individuales = referencia directa a bpr (que ya tiene ajuste aplicado)
       [1,2,3,4,5,7,8].forEach(ci=>pF(ci,row,`+${ea(ci,bpr)}`,0,fNorm,null,aC,BORDER_ALL,NF_MONEY));
