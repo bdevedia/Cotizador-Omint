@@ -3,7 +3,7 @@ import { CATS, CAT_IDS, ZONA_IDS, MEJORAS_DEF } from "./constants";
 import { calcOsdeFromEmps } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
-function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap,planesNombres){
+function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap,planesNombres,adjPct){
   const planLabel=res=>(planesNombres||{})[res.adjKey]||res.planId;
   const today=new Date().toLocaleDateString("es-AR");
   const mes=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date().getMonth()];
@@ -216,8 +216,9 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const adj=adjRowIdxs[pi];
 
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
-      p(1,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 0-59 (editable)
-      p(2,row,0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 60+ (editable)
+      const adjPctPlan=(adjPct||{})[res.adjKey]||{};
+      p(1,row,adjPctPlan.pct059||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 0-59 (editable)
+      p(2,row,adjPctPlan.pct60||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1); // adj 60+ (editable)
 
       const precio059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getP(k)||0),0)/tot059:0;
       const precio60=getP("s60plus");

@@ -21,6 +21,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const [planMapping,setPlanMapping]=useState({});
   const [adjPrices,setAdjPrices]=useState({});
   const [adjCostos,setAdjCostos]=useState({});
+  const [adjPct,setAdjPct]=useState({}); // {adjKey: {pct059, pct60}} — ajuste IA exacto para Excel
   const [empresa,setEmpresa]=useState("");
   const [showSug,setShowSug]=useState(false);
   const [showExport,setShowExport]=useState(false);
@@ -164,19 +165,22 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
 INSTRUCCIONES CRÍTICAS:
 1. Los precios que ves abajo son los precios ACTUALES de esta cotización. Calculá SIEMPRE desde estos valores.
 2. "subir X%" = precio_actual * (1 + X/100). "bajar X%" = precio_actual * (1 - X/100).
-3. Si modificás solo algunas categorías, las demás deben quedar con su precio actual SIN CAMBIOS.
-4. Nunca pongas 0 en ninguna categoría a menos que el usuario lo pida explícitamente.
+3. Si modificás solo algunas categorías, las demás deben quedar con pct059=0 y pct60=0.
+4. Nunca uses porcentajes que no pediste explícitamente.
 5. Respondé con un bloque por cada plan modificado. Sin explicaciones largas.
+6. IMPORTANTE: devolvé SIEMPRE el porcentaje de ajuste exacto que te pidieron, no el precio final.
 
-CATEGORÍAS: s0_25=Socio 0-25, s26_34=Socio 26-35, s35_54=Socio 36-54, s55_59=Socio 55-59, s60plus=Socio 60+, h1=Hijo 1, h2plus=Hijo 2+
+CATEGORÍAS (para referencia): s0_25=0-25, s26_34=26-35, s35_54=36-54, s55_59=55-59, s60plus=60+, h1=Hijo1, h2plus=Hijo2+
 
 FORMATO DE RESPUESTA (repetir por cada plan):
 Confirmación breve.
 ZONA: [zona exacta]
 PLAN: [plan exacto]
 \`\`\`json
-{"s0_25":VALOR,"s26_34":VALOR,"s35_54":VALOR,"s55_59":VALOR,"s60plus":VALOR,"h1":VALOR,"h2plus":VALOR}
+{"pct059": PORCENTAJE_DECIMAL_0_59, "pct60": PORCENTAJE_DECIMAL_60}
 \`\`\`
+Ejemplos: bajar 12% → pct059=-0.12 | subir 5% → pct059=0.05 | sin cambio → pct059=0
+Si solo se modifica 60+, poner pct059=0. Si solo 0-59, poner pct60=0. Si ambos igual, mismo valor.
 
 PRECIOS ACTUALES DE ESTA COTIZACIÓN (usá estos como base para cualquier cálculo):
 ${preciosActuales}
@@ -211,19 +215,20 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           const ak=`${zona}||${planId}`;
           try{
             const jsonData=JSON.parse(match[3].trim());
-            const currentRows=results.find(r=>r.adjKey===ak)?.bd.rows||[];
+            const res=results.find(r=>r.adjKey===ak);
+            if(!res)return;
+            const basePricesForPlan=precios?.[zona]?.[planId]||{};
+            const pct059=typeof jsonData.pct059==="number"?jsonData.pct059:0;
+            const pct60=typeof jsonData.pct60==="number"?jsonData.pct60:0;
+            // Aplicar porcentaje exacto sobre precios base (no sobre precios ya ajustados)
             const u={};
             CAT_IDS.forEach(id=>{
-              const aiVal=jsonData[id];
-              const curPrecio=currentRows.find(r=>r.id===id)?.precio||0;
-              // Solo usar valor de la IA si es un número positivo válido
-              if(aiVal!==undefined&&aiVal!==null&&typeof aiVal==="number"&&aiVal>0){
-                u[id]=Math.round(aiVal);
-              } else {
-                u[id]=Math.round(curPrecio);
-              }
+              const base=basePricesForPlan[id]||0;
+              const pct=id==="s60plus"?pct60:pct059;
+              u[id]=Math.round(base*(1+pct)*100)/100;
             });
             setAdjPrices(prev=>({...prev,[ak]:u}));
+            setAdjPct(prev=>({...prev,[ak]:{pct059,pct60}}));
             updCount++;
           }catch(e){console.error("JSON parse error",e);}
         });
@@ -259,7 +264,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
   const sDef=[{n:1,l:"Nómina"},{n:2,l:"Mapeo"},{n:3,l:"Comisión"},{n:4,l:"Cotización"}];
 
   return(<div>
-    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}} planCustomNames={planCustomNames}/>}
+    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}} planCustomNames={planCustomNames} adjPct={adjPct}/>}
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
       {sDef.map((s,i)=>(<Fragment key={s.n}>
