@@ -4,7 +4,7 @@ import { calcOsdeFromEmps } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
 function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap,planesNombres,adjPct){
-  const planLabel=res=>(planesNombres||{})[res.adjKey]||(res.planVigente&&res.planVigente!==res.planId?res.planVigente:res.planId);
+  const planLabel=res=>(planesNombres||{})[res.adjKey]||res.planId;
   const today=new Date().toLocaleDateString("es-AR");
   const mes=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date().getMonth()];
   const mesAno=`${mes.charAt(0).toUpperCase()+mes.slice(1)} ${new Date().getFullYear()}`;
