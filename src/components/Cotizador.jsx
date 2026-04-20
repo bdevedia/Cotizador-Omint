@@ -93,7 +93,9 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
       }));
       const bd=calcBD(empList,map,effPrices,effCostos);
       const mapping=map.planCol?externalPlans.filter(p=>(planMapping[p]===planId)&&!isOmintPlan(p)).map(p=>({from:p,to:planId})):[];
-      return{zona,planId,empList,bd,mapping,adjKey,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0};
+      // baseCostosXLS: costo sin mejoras ni comisión (para que Excel pueda desglosar correctamente)
+      const baseCostosXLS=Object.fromEntries(CAT_IDS.map(c=>[c,adjC[c]!==undefined?adjC[c]:baseCostos[c]||0]));
+      return{zona,planId,empList,bd,mapping,adjKey,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0,baseCostosXLS};
     });
   }
 

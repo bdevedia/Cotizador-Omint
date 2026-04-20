@@ -281,7 +281,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const pf=planFill(pi);
       costoEERowIdxs.push(row);
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
-      const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
+      const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
       [getC("s0_25"),getC("s26_34"),getC("s35_54"),getC("s55_59"),getC("s60plus")].forEach((v,i)=>p(i+1,row,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
       p(7,row,+getC("h1").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       p(8,row,+getC("h2plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
@@ -297,7 +297,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
     // ── Retroalimentar costos EE capitados J/K/L ─────────────────────────────
     costoEERowIdxs.forEach((eer,pi)=>{
-      const getC=id=>zResults[pi].bd.rows.find(x=>x.id===id)?.costo||0;
+      const getC=id=>(zResults[pi].baseCostosXLS||{})[id]??zResults[pi].bd.rows.find(x=>x.id===id)?.costo??0;
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
@@ -368,7 +368,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const ctr=row;
       costoTotRowIdxs.push(ctr);
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
-      const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
+      const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
       const brokerFactor=`(1+${brokerCellRef})`;
       // Each cat = (costoEE + mejora) × (1 + comisión)
       [1,2,3,4,5,7,8].forEach(ci=>{
@@ -388,7 +388,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     // para evitar rango continuo con hueco en col 6 (G=gap)
     zResults.forEach((res,pi)=>{
       const ctr=costoTotRowIdxs[pi];
-      const getC=id=>res.bd.rows.find(x=>x.id===id)?.costo||0;
+      const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
