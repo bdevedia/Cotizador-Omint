@@ -419,7 +419,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
     // ── SECCIÓN 7: COTIZACIÓN ────────────────────────────────────────────────
     const hasOsde=zResults.some(res=>{
-      const mo=planMappingOsde?.[res.adjKey];
+      const mo=planMappingOsde?.[res.osdeKey||res.adjKey];
       return mo&&osde?.[mo];
     });
 
