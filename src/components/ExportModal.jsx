@@ -12,7 +12,7 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMapping
     fecha:new Date().toISOString().split("T")[0],
     validez:"La propuesta tiene validez por 30 días.",
     formato:"completo",
-    planesNombres:Object.fromEntries(results.map(r=>[r.adjKey,(planCustomNames||{})[r.adjKey]||r.planId])),
+    planesNombres:Object.fromEntries(results.map(r=>[r.adjKey,(planCustomNames||{})[r.adjKey]||(r.planVigente&&r.planVigente!==r.planId?r.planVigente:r.planId)])),
     textoExtra:"",
     masaSalarial:"",
   });
