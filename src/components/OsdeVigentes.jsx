@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { FONT, BLUE, BORDER, OSDE_CATS, EMPTY_OSDE } from "../constants";
 import { btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 import { parseOsdeFile, downloadOsdeTemplate } from "../parsers";
+import AjusteHistorial from "./AjusteHistorial";
 
 // ── OSDE VIGENTES ─────────────────────────────────────────────────────────────
-function OsdeVigentes({osde,onSave}){
+function OsdeVigentes({osde,onSave,ajustes=[],onAjusteUpdate}){
   const plans=Object.keys(osde||{}).sort();
   const [plan,setPlan]=useState(plans[0]||null);
   const [newPlan,setNewPlan]=useState("");
@@ -78,6 +79,13 @@ function OsdeVigentes({osde,onSave}){
         {ok&&<span style={{fontSize:12,color:"#16A34A",alignSelf:"center",fontFamily:FONT}}>✓ Guardado</span>}
       </div>
     </div>):(<div style={{...card(),color:"#6B7280",fontSize:13,fontFamily:FONT}}>Agregá un plan OSDE para comenzar.</div>)}
+  <AjusteHistorial
+    historial={ajustes}
+    onUpdate={onAjusteUpdate}
+    baseRef={osde?.[plans[0]]?.[OSDE_CATS[0]?.id]||0}
+    accentColor="#059669"
+    titulo="Ajuste mensual — Precios OSDE"
+  />
   </div>);
 }
 

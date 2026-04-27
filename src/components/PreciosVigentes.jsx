@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER, ZONA_IDS, ZONA_COLORS, CATS, EMPTY_CATS } from "../constants";
 import { fmt } from "../utils";
 import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
+import AjusteHistorial from "./AjusteHistorial";
 
 // ── PRECIOS VIGENTES ──────────────────────────────────────────────────────────
-function PreciosVigentes({precios,onSave}){
+function PreciosVigentes({precios,onSave,ajustes=[],onAjusteUpdate}){
   const allPlans=[...new Set(ZONA_IDS.flatMap(z=>Object.keys(precios?.[z]||{})))].sort();
   const [zona,setZona]=useState(ZONA_IDS[0]);
   const [plan,setPlan]=useState(null);
@@ -14,6 +15,8 @@ function PreciosVigentes({precios,onSave}){
   useEffect(()=>{if(selPlan)setLoc({...EMPTY_CATS,...(precios?.[zona]?.[selPlan]||{})});},[zona,selPlan,precios]);
   function save(){const nxt=JSON.parse(JSON.stringify(precios||{}));if(!nxt[zona])nxt[zona]={};nxt[zona][selPlan]={...loc};onSave(nxt);setOk(true);setTimeout(()=>setOk(false),2500);}
   const zc=ZONA_COLORS[zona]||{c:BLUE,bg:BLUE_LT};
+  // Precio de referencia para AjusteHistorial: AMBA, primer plan, categoría s0_25
+  const baseRef=precios?.AMBA?.[planList[0]]?.s0_25||0;
   return(<div>
     <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Precios Vigentes</h2>
     <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Precios por zona y plan (banda 200-499 cápitas). Podés importarlos o editarlos manualmente.</p>
@@ -43,6 +46,13 @@ function PreciosVigentes({precios,onSave}){
         </div>
       </div>}
     </>}
+  <AjusteHistorial
+    historial={ajustes}
+    onUpdate={onAjusteUpdate}
+    baseRef={baseRef}
+    accentColor={BLUE}
+    titulo="Ajuste mensual de lista — Precios Omint"
+  />
   </div>);
 }
 

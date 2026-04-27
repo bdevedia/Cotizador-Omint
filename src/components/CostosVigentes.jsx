@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { FONT, BLUE, BORDER, CATS, EMPTY_CATS } from "../constants";
 import { fmt } from "../utils";
 import { btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
+import AjusteHistorial from "./AjusteHistorial";
 
 // ── COSTOS VIGENTES ───────────────────────────────────────────────────────────
-function CostosVigentes({costos,onSave}){
+function CostosVigentes({costos,onSave,ajustes=[],onAjusteUpdate}){
   const plans=Object.keys(costos||{}).sort();
   const [plan,setPlan]=useState(plans[0]||null);
   const [loc,setLoc]=useState({});const[ok,setOk]=useState(false);
@@ -32,6 +33,13 @@ function CostosVigentes({costos,onSave}){
         </div>
       </div>}
     </>}
+  <AjusteHistorial
+    historial={ajustes}
+    onUpdate={onAjusteUpdate}
+    baseRef={costos?.[plans[0]]?.s0_25||0}
+    accentColor="#7C3AED"
+    titulo="Ajuste mensual — Costos"
+  />
   </div>);
 }
 
