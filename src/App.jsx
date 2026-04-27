@@ -22,6 +22,7 @@ function App(){
   const [mejoras,setMejoras]=useState(null);
   const [quotes,setQuotes]=useState([]);
   const [apiKey,setApiKey]=useState("");
+  const [globalAjuste,setGlobalAjuste]=useState(0); // % ajuste mensual sobre lista base
   const [loaded,setLoaded]=useState(false);
   const [syncStatus,setSyncStatus]=useState("idle"); // idle | syncing | ok | error
 
@@ -45,6 +46,7 @@ function App(){
         loadSync("mejoras","omint-mejoras",setMejoras),
       ]);
       setApiKey(lsGet("omint-apikey",""));
+      setGlobalAjuste(lsGet("omint-ajuste",0));
       setLoaded(true);
       // Suscribir actualizaciones en tiempo real (también actualizan localStorage)
       dbSubscribe("precios",v=>{setPrecios(v||{});lsSet("omint-precios",v||{});});
@@ -65,6 +67,22 @@ function App(){
   function deleteQuote(id){const nq=quotes.filter(q=>q.id!==id);setQuotes(nq);lsSet("omint-quotes",nq);sync(()=>dbSet("quotes",nq));}
   function renameEmpresa(oldName,newName){const nq=quotes.map(q=>q.empresa===oldName?{...q,empresa:newName}:q);setQuotes(nq);lsSet("omint-quotes",nq);sync(()=>dbSet("quotes",nq));}
   function saveApiKey(k){setApiKey(k);lsSet("omint-apikey",k);}
+  function saveAjuste(v){const n=parseFloat(v)||0;setGlobalAjuste(n);lsSet("omint-ajuste",n);}
+
+  // Aplica el ajuste % a cualquier árbol de precios numéricos (precios/costos/osde)
+  function applyAjuste(data){
+    if(!data||!globalAjuste)return data;
+    const m=1+globalAjuste/100;
+    function mult(obj){
+      if(typeof obj==="number")return Math.round(obj*m);
+      if(obj&&typeof obj==="object")return Object.fromEntries(Object.entries(obj).map(([k,v])=>[k,mult(v)]));
+      return obj;
+    }
+    return mult(data);
+  }
+  const preciosAdj=applyAjuste(precios||{});
+  const costosAdj=applyAjuste(costos||{});
+  const osdeAdj=applyAjuste(osde||{});
 
   const knownEmpresas=[...new Set(quotes.map(q=>q.empresa).filter(Boolean))];
   const nav=[
@@ -89,6 +107,24 @@ function App(){
           fontWeight:item.strong?700:sec===item.id?600:400,fontSize:item.strong?14:13,
           borderLeft:sec===item.id?`3px solid ${BLUE}`:"3px solid transparent"}}>{item.label}</button>))}
       </nav>
+      {loaded&&(<div style={{padding:"0.875rem 1.25rem",borderTop:`1px solid ${BORDER}`,background:"#FFFBF0"}}>
+        <p style={{fontSize:11,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT,marginBottom:7}}>Ajuste de lista</p>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <input
+            type="number"
+            value={globalAjuste===0?"":globalAjuste}
+            onChange={e=>saveAjuste(e.target.value)}
+            placeholder="0"
+            step="0.1"
+            style={{width:64,padding:"5px 8px",border:`1.5px solid ${globalAjuste?`#F59E0B`:BORDER}`,borderRadius:6,fontSize:13,fontFamily:FONT,textAlign:"right",background:"#fff",color:"#111827",outline:"none"}}
+          />
+          <span style={{fontSize:13,color:"#6B7280",fontFamily:FONT}}>%</span>
+          {globalAjuste!==0&&<button onClick={()=>saveAjuste(0)} title="Quitar ajuste" style={{marginLeft:"auto",border:"none",background:"none",cursor:"pointer",fontSize:14,color:"#9CA3AF",padding:"2px 4px",lineHeight:1}}>✕</button>}
+        </div>
+        {globalAjuste!==0&&<p style={{fontSize:11,color:"#92400E",marginTop:5,fontFamily:FONT}}>
+          {globalAjuste>0?"▲":"▼"} Todos los precios ajustados <strong>{globalAjuste>0?"+":""}{globalAjuste}%</strong>
+        </p>}
+      </div>)}
       {loaded&&(<div style={{padding:"1rem 1.25rem",borderTop:`1px solid ${BORDER}`,background:BLUE_LT}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
           <p style={{fontSize:11,fontWeight:600,color:BLUE,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Resumen</p>
@@ -103,7 +139,7 @@ function App(){
     </div>
     <div style={{flex:1,padding:"2rem 2.5rem",overflowY:"auto",minWidth:0}}>
       {!loaded&&<p style={{fontSize:13,color:"#9CA3AF",fontFamily:FONT}}>Cargando…</p>}
-      {loaded&&sec==="cotizador"&&<Cotizador precios={precios||{}} costos={costos||{}} osde={osde||{}} mejoras={mejoras||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
+      {loaded&&sec==="cotizador"&&<Cotizador precios={preciosAdj} costos={costosAdj} osde={osdeAdj} mejoras={mejoras||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
       {loaded&&sec==="importar"&&<Importar onPreciosImport={savePre} onCostosImport={saveCos}/>}
       {loaded&&sec==="precios"&&<PreciosVigentes precios={precios} onSave={savePre}/>}
       {loaded&&sec==="costos"&&<CostosVigentes costos={costos} onSave={saveCos}/>}
