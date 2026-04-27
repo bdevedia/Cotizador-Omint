@@ -10,6 +10,86 @@ import { parseNominaFija, downloadTemplate } from "../parsers";
 import { calcBD, calcOsdeFromEmps, checkPriceInversions } from "../calc";
 import ExportModal from "./ExportModal";
 
+// ── MODAL TITULARES DUPLICADOS ────────────────────────────────────────────────
+function DuplicadosModal({items,onResolve}){
+  const [resoluciones,setResoluciones]=useState(()=>Object.fromEntries(items.map(d=>[d.gid,"desestimar"])));
+  const [globalOp,setGlobalOp]=useState("");
+
+  function aplicarGlobal(op){
+    setGlobalOp(op);
+    setResoluciones(Object.fromEntries(items.map(d=>[d.gid,op])));
+  }
+
+  const overlay={position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"};
+  const modal={background:"#fff",borderRadius:14,padding:"1.75rem",width:"min(680px,96vw)",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",fontFamily:FONT};
+  const rowStyle={display:"grid",gridTemplateColumns:"1fr 1fr 180px",alignItems:"center",gap:"10px",padding:"10px 0",borderBottom:"1px solid #F3F4F6"};
+
+  return(
+    <div style={overlay}>
+      <div style={modal}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:"1.25rem"}}>
+          <span style={{fontSize:26,lineHeight:1}}>⚠️</span>
+          <div>
+            <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4}}>Titulares duplicados en el archivo</h3>
+            <p style={{fontSize:13,color:"#374151",lineHeight:1.5}}>
+              Se encontraron <strong>{items.length} grupo{items.length>1?"s familiares":""} familiar{items.length===1?"":""}</strong> con dos filas marcadas como <em>Titular</em>. Elegí qué hacer con cada uno.
+            </p>
+          </div>
+        </div>
+
+        {/* Aplicar a todos */}
+        <div style={{display:"flex",gap:8,marginBottom:"1rem",padding:"10px 14px",background:"#F9FAFB",borderRadius:8,alignItems:"center"}}>
+          <span style={{fontSize:12,fontWeight:600,color:"#6B7280",marginRight:4}}>Aplicar a todos:</span>
+          {[{v:"desestimar",l:"Desestimar el 2°"},{v:"conyuge",l:"Incluir como cónyuge"}].map(o=>(
+            <button key={o.v} onClick={()=>aplicarGlobal(o.v)}
+              style={{...globalOp===o.v?btnP:btnS,padding:"5px 14px",fontSize:12}}>
+              {o.l}
+            </button>
+          ))}
+        </div>
+
+        {/* Encabezado tabla */}
+        <div style={{...rowStyle,borderBottom:"2px solid #E5E7EB",paddingBottom:6,marginBottom:2}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:"0.04em"}}>Grupo / 1° Titular</span>
+          <span style={{fontSize:11,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:"0.04em"}}>2° Titular (duplicado)</span>
+          <span style={{fontSize:11,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:"0.04em"}}>¿Qué hacer?</span>
+        </div>
+
+        {items.map(d=>(
+          <div key={d.gid} style={rowStyle}>
+            <div>
+              <span style={{fontSize:11,color:"#9CA3AF"}}>Grupo {d.gid}</span><br/>
+              <span style={{fontWeight:600,fontSize:13,color:"#111827"}}>{d.nombre1}</span>
+              {d.edad1!=null&&<span style={{fontSize:12,color:"#6B7280",marginLeft:6}}>{d.edad1} años</span>}
+            </div>
+            <div>
+              <span style={{fontWeight:600,fontSize:13,color:"#111827"}}>{d.nombre2}</span>
+              {d.edad2!=null&&<span style={{fontSize:12,color:"#6B7280",marginLeft:6}}>{d.edad2} años</span>}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {[{v:"desestimar",l:"Desestimar",desc:"No incluir al 2°"},{v:"conyuge",l:"Como cónyuge",desc:"Suma su edad al grupo"}].map(o=>(
+                <label key={o.v} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12,color:resoluciones[d.gid]===o.v?"#1B2A7B":"#374151",fontWeight:resoluciones[d.gid]===o.v?600:400}}>
+                  <input type="radio" name={`dup-${d.gid}`} value={o.v}
+                    checked={resoluciones[d.gid]===o.v}
+                    onChange={()=>{setGlobalOp("");setResoluciones(p=>({...p,[d.gid]:o.v}));}}
+                    style={{accentColor:BLUE}}/>
+                  <span>{o.l}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div style={{display:"flex",gap:10,marginTop:"1.5rem",justifyContent:"flex-end"}}>
+          <button onClick={()=>onResolve(resoluciones)} style={{...btnP,padding:"9px 28px",fontSize:14}}>
+            Confirmar y cargar nómina
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── COTIZADOR ─────────────────────────────────────────────────────────────────
 function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
@@ -34,6 +114,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const [showScenarios,setShowScenarios]=useState(false);
   const [nomErrors,setNomErrors]=useState([]); // validación de nómina
   const [spouseWarning,setSpouseWarning]=useState(null); // advertencia cónyuges múltiples
+  const [dupWarning,setDupWarning]=useState(null); // {items, rawRows, rawCols} — titulares duplicados
   const [brokerPct,setBrokerPct]=useState(""); // comisión del broker (%)
   const [compareOsde,setCompareOsde]=useState(false);
   const [planMappingOsde,setPlanMappingOsde]=useState({});
@@ -137,6 +218,20 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
         }
         // Éxito — cargar con mapeo fijo (sin paso de configuración)
         if(result.rows.length===0){setNomErrors([{tipo:"error",msg:"El archivo no tiene filas de datos. Revisá que tenga al menos una fila de empleados."}]);setEmps(null);return;}
+        // Si hay titulares duplicados sin resolver, mostrar modal antes de cargar
+        if(result.titularDuplicados&&result.titularDuplicados.length>0){
+          setDupWarning({items:result.titularDuplicados,rawRows:raw,rawCols});
+          return; // esperar decisión del usuario
+        }
+        applyParsedResult(result);
+      }catch(err){
+        setNomErrors([{tipo:"error",msg:"Error al leer el archivo. Revisá el template."}]);
+      }
+    };
+    r.readAsBinaryString(f);
+  }
+
+  function applyParsedResult(result){
         setEmps(result.rows);
         setCols(Object.keys(result.rows[0]));
         setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
@@ -150,11 +245,15 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
         if(result.conyugesMultiples&&result.conyugesMultiples.length>0){
           setSpouseWarning({count:result.conyugesMultiples.length,familias:result.conyugesMultiples.map(x=>x.familia)});
         }else{setSpouseWarning(null);}
-      }catch(err){
-        setNomErrors([{tipo:"error",msg:"Error al leer el archivo. Revisá el template."}]);
-      }
-    };
-    r.readAsBinaryString(f);
+  }
+
+  function resolveDuplicados(resoluciones){
+    // Re-parsear el archivo con las resoluciones elegidas por el usuario
+    if(!dupWarning)return;
+    const result=parseNominaFija(dupWarning.rawRows,dupWarning.rawCols,resoluciones);
+    setDupWarning(null);
+    if(result.error){setNomErrors([{tipo:"error",msg:result.error}]);setEmps(null);return;}
+    applyParsedResult(result);
   }
 
   async function sendChat(){
@@ -277,6 +376,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
 
   return(<div>
     {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}} planCustomNames={planCustomNames} adjPct={adjPct}/>}
+    {dupWarning&&<DuplicadosModal items={dupWarning.items} onResolve={resolveDuplicados}/>}
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
       {sDef.map((s,i)=>(<Fragment key={s.n}>

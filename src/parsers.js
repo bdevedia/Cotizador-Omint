@@ -40,7 +40,7 @@ function calcEdadDesde(fechaStr){
   return edad>0&&edad<120?edad:null;
 }
 
-function parseNominaFija(rawRows,rawCols){
+function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
   // Validar columnas requeridas
   for(const hints of REQUIRED_COLS_HINTS){
     if(!findColHints(rawCols,hints)){
@@ -85,6 +85,8 @@ function parseNominaFija(rawRows,rawCols){
   }
 
   const familias={};
+  const gidsConTitular=new Set(); // para detectar titulares duplicados
+  const titularDuplicados=[]; // {gid, nombre1, edad1, nombre2, edad2}
   let filasIgnoradas=0;
   const hijosEdadInvalida=[];
   rawRows.forEach(row=>{
@@ -101,6 +103,27 @@ function parseNominaFija(rawRows,rawCols){
       HIJOS_MENORES_25:0,HIJOS_MAYORES_25_EDADES:[],PLAN_ACTUAL:"",ZONA:zona,
       OSDE_HIJO_26_27:0,OSDE_IND_JOVEN:0,OSDE_IND_MAYOR:0};
     if(tipo==="T"){
+      // Detectar titular duplicado: ya procesamos un "T" para este grupo
+      if(gidsConTitular.has(gid)){
+        const res=resolucionDuplicados?.[gid];
+        // Registrar el duplicado (solo la primera vez que aparece)
+        if(!titularDuplicados.find(d=>d.gid===gid)){
+          titularDuplicados.push({
+            gid,
+            nombre1:familias[gid].NOMBRE||"-",
+            edad1:familias[gid].EDAD_TITULAR,
+            nombre2:nombre||"-",
+            edad2:edad,
+          });
+        }
+        if(res==="conyuge"){
+          // Tratar segundo titular como cónyuge
+          if(edad!==null)familias[gid].CONYUGES.push(edad);
+        }
+        // "desestimar" o sin resolución: ignorar la fila extra
+        return;
+      }
+      gidsConTitular.add(gid);
       if(edad!==null)familias[gid].EDAD_TITULAR=edad;
       if(plan)familias[gid].PLAN_ACTUAL=plan;
       if(zona)familias[gid].ZONA=zona;
@@ -147,7 +170,9 @@ function parseNominaFija(rawRows,rawCols){
   });
 
   if(rows.length===0)return{error:"No se encontraron titulares con edad válida. Revisá el template."};
-  return{rows,filasIgnoradas,conyugesMultiples,hijosEdadInvalida,totalRaw:rawRows.length};
+  // Si hay duplicados sin resolución, devolverlos para que la UI pregunte al usuario
+  const dupsSinResolver=titularDuplicados.filter(d=>!resolucionDuplicados?.[d.gid]);
+  return{rows,filasIgnoradas,conyugesMultiples,hijosEdadInvalida,titularDuplicados:dupsSinResolver,totalRaw:rawRows.length};
 }
 
 // ── PARSERS ───────────────────────────────────────────────────────────────────
