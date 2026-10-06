@@ -121,8 +121,10 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
     const plan=colPlan?String(row[colPlan]||"").trim():"";
     const zona=colZona?String(row[colZona]||"").trim():"";
     const nombre=colNombre?String(row[colNombre]||"").trim():"";
+    const nombreMiembro=nombre==="-"?"":nombre;
     if(!familias[gid])familias[gid]={GRUPO:gid,NOMBRE:nombre,EDAD_TITULAR:null,
       CONYUGES:[],  // lista de TODAS las edades de conyuges
+      CONYUGES_NOMBRES:[],TIT_NOMBRE:"",HIJOS_NOMBRES:[], // nombres por integrante (nómina valorizada)
       HIJOS_MENORES_25:0,HIJOS_MAYORES_25_EDADES:[],HIJOS_EDADES:[],PLAN_ACTUAL:"",ZONA:zona,
       OSDE_HIJO_26_27:0,OSDE_IND_JOVEN:0,OSDE_IND_MAYOR:0,COSTO_ACTUAL:null};
     // Costo actual: se suma lo informado en cualquier fila del grupo (suele venir en la del titular)
@@ -144,7 +146,7 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
         }
         if(res==="conyuge"){
           // Tratar segundo titular como cónyuge
-          if(edad!==null)familias[gid].CONYUGES.push(edad);
+          if(edad!==null){familias[gid].CONYUGES.push(edad);familias[gid].CONYUGES_NOMBRES.push(nombreMiembro);}
         }
         // "desestimar" o sin resolución: ignorar la fila extra
         return;
@@ -154,12 +156,14 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
       if(plan)familias[gid].PLAN_ACTUAL=plan;
       if(zona)familias[gid].ZONA=zona;
       if(nombre&&nombre!=="-")familias[gid].NOMBRE=nombre;
+      familias[gid].TIT_NOMBRE=nombreMiembro;
     }else if(tipo==="C"){
       // Guardar TODOS los conyuges (puede haber duplicados en el archivo)
-      if(edad!==null)familias[gid].CONYUGES.push(edad);
+      if(edad!==null){familias[gid].CONYUGES.push(edad);familias[gid].CONYUGES_NOMBRES.push(nombreMiembro);}
     }else if(tipo==="H"){
       if(edad===null){filasIgnoradas++;hijosEdadInvalida.push(gid);return;}
       familias[gid].HIJOS_EDADES.push(edad);
+      familias[gid].HIJOS_NOMBRES.push(nombreMiembro);
       if(edad<=25)familias[gid].HIJOS_MENORES_25++;
       else familias[gid].HIJOS_MAYORES_25_EDADES.push(edad);
       // OSDE usa 28 como corte: <28 = hijo, >=28 = individual
@@ -194,9 +198,9 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
       COSTO_ACTUAL:f.COSTO_ACTUAL,
       // Integrantes considerados en el cálculo (para la nómina valorizada)
       MIEMBROS:[
-        {parentesco:"T",edad:f.EDAD_TITULAR},
-        ...(primerConyuge>0?[{parentesco:"C",edad:primerConyuge}]:[]),
-        ...f.HIJOS_EDADES.map(edad=>({parentesco:"H",edad})),
+        {parentesco:"T",edad:f.EDAD_TITULAR,nombre:f.TIT_NOMBRE},
+        ...(primerConyuge>0?[{parentesco:"C",edad:primerConyuge,nombre:f.CONYUGES_NOMBRES[0]||""}]:[]),
+        ...f.HIJOS_EDADES.map((edad,i)=>({parentesco:"H",edad,nombre:f.HIJOS_NOMBRES[i]||""})),
       ],
     });
   });

@@ -2,7 +2,7 @@ import * as XLSX from "xlsx-js-style";
 import { catAge } from "./utils";
 
 // ── NÓMINA VALORIZADA ─────────────────────────────────────────────────────────
-// Una fila por integrante: plan y costo actual vs. plan Omint y costo nuevo.
+// Una fila por integrante (con su nombre si la nómina lo trae): plan y costo actual vs. plan Omint y costo nuevo.
 // Los costos van en la fila del titular (por grupo familiar); el costo nuevo usa los
 // precios efectivos de la cotización, con la misma lógica de categorías que calcBD.
 // Equivalencias: una hoja. Simulación: una hoja por plan simulado.
@@ -47,11 +47,11 @@ function buildSheet(items,titulo){
 
   ws[ea(0,1)]={v:titulo,t:"s",s:{font:{name:"Calibri",sz:14,bold:true,color:{rgb:"1B2A7B"}}}};
 
-  ["nsoc","edad","parentesco"].forEach((h,c)=>put(c,HEADER_ROW,h));
-  put(3,HEADER_ROW,"Plan_Med",{fill:FILL_ACTUAL});
-  put(4,HEADER_ROW,"Costo Actual",{fill:FILL_ACTUAL});
-  put(5,HEADER_ROW,"Nuevo Plan",{fill:FILL_NUEVO});
-  put(6,HEADER_ROW,"Nuevo Costo",{fill:FILL_NUEVO});
+  ["nsoc","edad","parentesco","nombre"].forEach((h,c)=>put(c,HEADER_ROW,h));
+  put(4,HEADER_ROW,"Plan_Med",{fill:FILL_ACTUAL});
+  put(5,HEADER_ROW,"Costo Actual",{fill:FILL_ACTUAL});
+  put(6,HEADER_ROW,"Nuevo Plan",{fill:FILL_NUEVO});
+  put(7,HEADER_ROW,"Nuevo Costo",{fill:FILL_NUEVO});
 
   let row=HEADER_ROW+1;
   const first=row;
@@ -64,10 +64,11 @@ function buildSheet(items,titulo){
       put(0,row,isNaN(nsoc)?fam.GRUPO:nsoc);
       put(1,row,m.edad);
       put(2,row,m.parentesco);
-      put(3,row,fam.PLAN_ACTUAL||"",{fill:FILL_ACTUAL});
-      put(4,row,esTit&&fam.COSTO_ACTUAL!=null?fam.COSTO_ACTUAL:"",{fill:FILL_ACTUAL,nf:NF_MONEY});
-      put(5,row,plan,{fill:FILL_NUEVO});
-      put(6,row,esTit?precio:"",{fill:FILL_NUEVO,nf:NF_MONEY});
+      put(3,row,m.nombre||"");
+      put(4,row,fam.PLAN_ACTUAL||"",{fill:FILL_ACTUAL});
+      put(5,row,esTit&&fam.COSTO_ACTUAL!=null?fam.COSTO_ACTUAL:"",{fill:FILL_ACTUAL,nf:NF_MONEY});
+      put(6,row,plan,{fill:FILL_NUEVO});
+      put(7,row,esTit?precio:"",{fill:FILL_NUEVO,nf:NF_MONEY});
       row++;
     });
     totActual+=fam.COSTO_ACTUAL||0;
@@ -75,29 +76,29 @@ function buildSheet(items,titulo){
   });
   const last=row-1;
   const totRow=row;
-  put(4,totRow,totActual,{fill:FILL_ACTUAL,nf:NF_MONEY,font:FB,formula:`SUM(${ea(4,first)}:${ea(4,last)})`});
-  put(6,totRow,totNuevo,{fill:FILL_NUEVO,nf:NF_MONEY,font:FB,formula:`SUM(${ea(6,first)}:${ea(6,last)})`});
+  put(5,totRow,totActual,{fill:FILL_ACTUAL,nf:NF_MONEY,font:FB,formula:`SUM(${ea(5,first)}:${ea(5,last)})`});
+  put(7,totRow,totNuevo,{fill:FILL_NUEVO,nf:NF_MONEY,font:FB,formula:`SUM(${ea(7,first)}:${ea(7,last)})`});
 
-  // Resumen (I7:M10). Los módulos de cobertura quedan en 0 para cargarlos a mano.
+  // Resumen (J7:N10). Los módulos de cobertura quedan en 0 para cargarlos a mano.
   const r0=HEADER_ROW+1;
-  put(8,r0,"Facturacion Planes Actuales:",{fill:FILL_ACTUAL});
-  put(9,r0,totActual,{fill:FILL_ACTUAL,nf:NF_MONEY,formula:`+${ea(4,totRow)}`});
-  put(8,r0+1,"Modulos de Cobertura:",{fill:FILL_ACTUAL});
-  put(9,r0+1,0,{fill:FILL_ACTUAL,nf:NF_MONEY});
-  put(8,r0+2,"Facturacion Actual Total:",{fill:FILL_ACTUAL});
-  put(9,r0+2,totActual,{fill:FILL_ACTUAL,nf:NF_MONEY,font:FB,formula:`+${ea(9,r0)}+${ea(9,r0+1)}`});
-  put(11,r0,"Facturacion con Nueva Propuesta:",{fill:FILL_NUEVO});
-  put(12,r0,totNuevo,{fill:FILL_NUEVO,nf:NF_MONEY,formula:`+${ea(6,totRow)}`});
-  put(11,r0+1,"Modulos con Nueva Propuesta:",{fill:FILL_NUEVO});
-  put(12,r0+1,0,{fill:FILL_NUEVO,nf:NF_MONEY});
-  put(11,r0+2,"Facturacion Nueva Total:",{fill:FILL_NUEVO});
-  put(12,r0+2,totNuevo,{fill:FILL_NUEVO,nf:NF_MONEY,font:FB,formula:`+${ea(12,r0)}+${ea(12,r0+1)}`});
-  put(11,r0+3,"Diferencia:",{fill:FILL_NUEVO});
-  put(12,r0+3,totNuevo>0?totActual/totNuevo-1:0,{fill:FILL_NUEVO,nf:"0%",font:FB,
-    formula:`IF(${ea(12,r0+2)}=0,0,${ea(9,r0+2)}/${ea(12,r0+2)}-1)`});
+  put(9,r0,"Facturacion Planes Actuales:",{fill:FILL_ACTUAL});
+  put(10,r0,totActual,{fill:FILL_ACTUAL,nf:NF_MONEY,formula:`+${ea(5,totRow)}`});
+  put(9,r0+1,"Modulos de Cobertura:",{fill:FILL_ACTUAL});
+  put(10,r0+1,0,{fill:FILL_ACTUAL,nf:NF_MONEY});
+  put(9,r0+2,"Facturacion Actual Total:",{fill:FILL_ACTUAL});
+  put(10,r0+2,totActual,{fill:FILL_ACTUAL,nf:NF_MONEY,font:FB,formula:`+${ea(10,r0)}+${ea(10,r0+1)}`});
+  put(12,r0,"Facturacion con Nueva Propuesta:",{fill:FILL_NUEVO});
+  put(13,r0,totNuevo,{fill:FILL_NUEVO,nf:NF_MONEY,formula:`+${ea(7,totRow)}`});
+  put(12,r0+1,"Modulos con Nueva Propuesta:",{fill:FILL_NUEVO});
+  put(13,r0+1,0,{fill:FILL_NUEVO,nf:NF_MONEY});
+  put(12,r0+2,"Facturacion Nueva Total:",{fill:FILL_NUEVO});
+  put(13,r0+2,totNuevo,{fill:FILL_NUEVO,nf:NF_MONEY,font:FB,formula:`+${ea(13,r0)}+${ea(13,r0+1)}`});
+  put(12,r0+3,"Diferencia:",{fill:FILL_NUEVO});
+  put(13,r0+3,totNuevo>0?totActual/totNuevo-1:0,{fill:FILL_NUEVO,nf:"0%",font:FB,
+    formula:`IF(${ea(13,r0+2)}=0,0,${ea(10,r0+2)}/${ea(13,r0+2)}-1)`});
 
-  ws["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:12,r:totRow}});
-  ws["!cols"]=[{wch:11.4},{wch:5},{wch:9.7},{wch:12},{wch:14},{wch:12},{wch:14},{wch:4},{wch:28.3},{wch:14},{wch:4},{wch:30},{wch:14}];
+  ws["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:13,r:totRow}});
+  ws["!cols"]=[{wch:11.4},{wch:5},{wch:9.7},{wch:26},{wch:12},{wch:14},{wch:12},{wch:14},{wch:4},{wch:28.3},{wch:14},{wch:4},{wch:30},{wch:14}];
   return ws;
 }
 
