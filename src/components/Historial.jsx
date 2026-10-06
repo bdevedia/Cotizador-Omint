@@ -83,13 +83,14 @@ function Historial({quotes,onUpdate,onDelete,onRenameEmpresa}){
                 <thead><tr>{["Fecha","Socios","Facturación","Costo","C/F","Estado",""].map((h,i)=><th key={h+i} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
                 <tbody>{list.map(q=>{
                   const cf=q.cfTotal||0;
+                  const sims=q.simulaciones?.length>1?q.simulaciones:null; // simulación de varios planes: sin total único
                   const expSnap=!!expandedSnaps[q.id];
                   return(<Fragment key={q.id}>
                     <tr>
                       <td style={TD({})}>{fmtD(q.fecha)}</td>
                       <td style={TD({textAlign:"right",color:"#6B7280"})}>{q.socios||"—"}</td>
-                      <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(q.totalFac||q.total)}</td>
-                      <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(q.totalCosto||0)}</td>
+                      <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>{sims?<span style={{fontSize:12}}>{sims.length} planes simulados</span>:`$${fmt(q.totalFac||q.total)}`}</td>
+                      <td style={TD({textAlign:"right",color:"#DC2626"})}>{sims?"—":`$${fmt(q.totalCosto||0)}`}</td>
                       <td style={TD({textAlign:"right"})}>{cf>0&&<span style={{...badge(cfColor(cf),cfBg(cf)),minWidth:52,display:"inline-block",textAlign:"center"}}>{cf.toFixed(1)}%</span>}</td>
                       <td style={TD({textAlign:"right"})}><span style={badge(q.status==="cerrado"?"#065F46":"#92400E",q.status==="cerrado"?"#D1FAE5":"#FEF3C7")}>{q.status==="cerrado"?"Cerrado":"Abierto"}</span></td>
                       <td style={TD({textAlign:"right"})}>
@@ -101,6 +102,12 @@ function Historial({quotes,onUpdate,onDelete,onRenameEmpresa}){
                       </td>
                     </tr>
                     {expSnap&&q.snapshot&&<tr><td colSpan={7} style={{padding:"8px 16px",background:GRAY,borderBottom:`1px solid ${BORDER}`}}>
+                      {sims&&<div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:10}}>
+                        {sims.map(t=><div key={t.planId} style={{padding:"8px 12px",background:BLUE_LT,borderRadius:8,border:`1px solid ${BORDER}`,minWidth:180}}>
+                          <p style={{fontSize:11,fontWeight:700,color:BLUE,fontFamily:FONT,marginBottom:4}}>Simulación {t.planId}</p>
+                          <p style={{fontSize:11,color:BLUE,fontFamily:FONT}}>Fac: ${fmt(t.fac)} · C/F {t.cf?.toFixed(1)}%</p>
+                        </div>)}
+                      </div>}
                       <div style={{fontSize:11,fontFamily:FONT,color:"#374151",marginBottom:6,fontWeight:600}}>Detalle de precios cotizados:</div>
                       <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
                         {q.snapshot.map((s,si)=><div key={si} style={{padding:"8px 12px",background:"#fff",borderRadius:8,border:`1px solid ${BORDER}`,minWidth:180}}>

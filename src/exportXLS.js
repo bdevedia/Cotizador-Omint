@@ -49,8 +49,22 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
   const zonas=[...new Set(results.map(r=>r.zona))];
   const wb=XLSX.utils.book_new();
 
-  zonas.forEach(zona=>{
-    const zResults=results.filter(r=>r.zona===zona);
+  // Equivalencias: una hoja por zona con todos sus planes.
+  // Simulación: una hoja por plan simulado y zona, porque cada plan cotiza toda la nómina
+  // y sumar planes en la misma hoja duplicaría la distribución.
+  const usedNames=new Set();
+  function sheetName(base){
+    const clean=base.replace(/[[\]:*?/\\]/g," ").trim().slice(0,31)||"Hoja";
+    let name=clean,i=2;
+    while(usedNames.has(name)){const suf=` (${i++})`;name=clean.slice(0,31-suf.length)+suf;}
+    usedNames.add(name);
+    return name;
+  }
+  const hojas=results.some(r=>r.sim)
+    ?results.map(r=>({zona:r.zona,zResults:[r],nombre:zonas.length>1?`Sim. ${planLabel(r)} ${r.zona}`:`Sim. ${planLabel(r)}`}))
+    :zonas.map(zona=>({zona,zResults:results.filter(r=>r.zona===zona),nombre:zonas.length>1?`Cot. ${zona}`:"Cotización"}));
+
+  hojas.forEach(({zona,zResults,nombre})=>{
     const ws={};
     const merges=[];
     let row=0;
@@ -573,8 +587,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     ws["!cols"]=[
       {wch:20},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:3},{wch:11},{wch:11},{wch:14},{wch:12},{wch:14}
     ];
-    const sheetName=zonas.length>1?`Cot. ${zona}`.slice(0,31):"Cotización";
-    XLSX.utils.book_append_sheet(wb,ws,sheetName);
+    XLSX.utils.book_append_sheet(wb,ws,sheetName(nombre));
   });
 
   // Hoja Nómina
