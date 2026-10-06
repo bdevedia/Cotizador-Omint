@@ -1,16 +1,13 @@
 import { useState } from "react";
 import { FONT, BLUE, BORDER } from "../constants";
 import { btnP, btnS, inp, card } from "../styles";
+import { calcMultiplier } from "../calc";
 
 // ── AJUSTE HISTORIAL ──────────────────────────────────────────────────────────
 // historial : [{mes:"2025-04", pct:5.2, nota:""}]
 // baseRef   : precio de referencia para modo "ajustar a precio"
 // onUpdate  : fn(nuevoHistorial)
 // accentColor, titulo
-
-export function calcMultiplier(historial){
-  return (historial||[]).reduce((m,e)=>m*(1+e.pct/100),1);
-}
 
 function fmtMes(m){
   if(!m)return"";
@@ -54,11 +51,11 @@ function AjusteHistorial({historial=[],onUpdate,baseRef=0,accentColor=BLUE,titul
   }
 
   // Historial con acumulado corrido
-  let runCum=1;
-  const histCum=historial.map(e=>{
-    runCum*=(1+e.pct/100);
-    return{...e,cumAcum:runCum};
-  });
+  const histCum=historial.reduce((acc,e)=>{
+    const prev=acc.length?acc[acc.length-1].cumAcum:1;
+    acc.push({...e,cumAcum:prev*(1+e.pct/100)});
+    return acc;
+  },[]);
 
   const thS={padding:"8px 12px",fontFamily:FONT,fontWeight:600,color:"#6B7280",fontSize:11,
     textTransform:"uppercase",letterSpacing:"0.04em",border:"1px solid #E5E7EB",background:"#F9FAFB"};

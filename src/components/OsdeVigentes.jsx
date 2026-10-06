@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FONT, BLUE, BORDER, OSDE_CATS, EMPTY_OSDE } from "../constants";
 import { btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 import { parseOsdeFile, downloadOsdeTemplate } from "../parsers";
@@ -14,7 +14,11 @@ function OsdeVigentes({osde,onSave,ajustes=[],onAjusteUpdate}){
   const [importStatus,setImportStatus]=useState(null);
   const [importMsg,setImportMsg]=useState("");
   const selPlan=plans.includes(plan)?plan:(plans[0]||null);
-  useEffect(()=>{if(selPlan)setLoc({...EMPTY_OSDE,...(osde[selPlan]||{})});},[selPlan,osde]);
+  const [synced,setSynced]=useState(null);
+  if(selPlan&&(!synced||synced.plan!==selPlan||synced.src!==osde)){
+    setSynced({plan:selPlan,src:osde});
+    setLoc({...EMPTY_OSDE,...(osde[selPlan]||{})});
+  }
   function save(){
     if(!selPlan)return;
     const nxt={...(osde||{})};nxt[selPlan]={...loc};onSave(nxt);

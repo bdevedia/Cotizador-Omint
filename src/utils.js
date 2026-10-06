@@ -5,8 +5,6 @@ function cfBg(cf){return cf<=70?"#D1FAE5":cf<=82?"#FEF3C7":"#FEF2F2";}
 function cfLabel(cf){return cf<=70?"Excelente":cf<=82?"Aceptable":"Alto";}
 const fmt=n=>(+n).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtD=d=>new Date(d).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"});
-function exJSON(t){const m=t.match(/```json\s*([\s\S]*?)```/);if(m){try{return JSON.parse(m[1]);}catch{}}try{const m2=t.match(/\{[\s\S]*?\}/);if(m2)return JSON.parse(m2[0]);}catch{}return null;}
-function stripJ(t){return t.replace(/```json[\s\S]*?```/g,"").replace(/\{[^}]*\}/g,"").trim();}
 function planTier(id){const m=String(id).match(/^(\d+)/);return m?parseInt(m[1]):0;}
 function fechaLarga(d){
   if(!d)d=new Date();
@@ -20,5 +18,5 @@ function fechaLarga(d){
 function fmtPDF(n){return"$ "+(Math.round(+n)).toLocaleString("es-AR");}
 
 export { catAge, cfColor, cfBg, cfLabel, fmt, fmtD,
-  exJSON, stripJ, planTier,
+  planTier,
   fechaLarga, fmtPDF };

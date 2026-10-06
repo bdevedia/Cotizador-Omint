@@ -4,9 +4,6 @@ const OMINT_LOGO = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1
 const FONT="'Plus Jakarta Sans',sans-serif";
 const BLUE="#1B2A7B",BLUE_LT="#EEF1FB",BORDER="#E0E4F0",GRAY="#F7F8FC";
 
-function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
-function lsGet(k,def=null){try{const v=localStorage.getItem(k);return v!==null?JSON.parse(v):def;}catch{return def;}}
-
 // ── CATEGORÍAS (rangos corregidos: 26-35, 36-54) ─────────────────────────────
 const CATS=[
   {id:"s0_25",  label:"Socio 0–25"},
