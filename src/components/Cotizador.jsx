@@ -447,13 +447,13 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           <div style={{overflowX:"auto"}}>
             <table style={{borderCollapse:"collapse",fontSize:11,fontFamily:FONT,background:"#fff",borderRadius:6,overflow:"hidden"}}>
               <thead><tr style={{background:"#166534",color:"#fff"}}>
-                {["Grupo Familiar","Fecha de Nacimiento","Edad","Nombre","Tipo benef","Plan de contratación","Zona (opcional)"].map(h=><th key={h} style={{padding:"5px 10px",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>)}
+                {["Grupo Familiar","Fecha de Nacimiento","Edad","Nombre","Tipo benef","Plan de contratación","Zona (opcional)","Costo actual (opcional)"].map(h=><th key={h} style={{padding:"5px 10px",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {[["1","08.12.1961","64","García Juan","Titular","4500_PYME","AMBA"],
-                  ["1","01.03.1965","61","García Ana","Conyuge","4500_PYME","AMBA"],
-                  ["1","18.12.2014","","García Lucas","Hijo","4500_PYME","AMBA"],
-                  ["2","05.09.1960","65","López Pedro","Titular","6500_PYME",""],
+                {[["1","08.12.1961","64","García Juan","Titular","4500_PYME","AMBA","1.250.000"],
+                  ["1","01.03.1965","61","García Ana","Conyuge","4500_PYME","AMBA",""],
+                  ["1","18.12.2014","","García Lucas","Hijo","4500_PYME","AMBA",""],
+                  ["2","05.09.1960","65","López Pedro","Titular","6500_PYME","",""],
                 ].map((row,i)=><tr key={i} style={{background:i%2===0?"#F0FDF4":"#fff"}}>
                   {row.map((v,j)=><td key={j} style={{padding:"4px 10px",color:"#374151"}}>{v}</td>)}
                 </tr>)}
@@ -464,6 +464,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
             Tipo benef acepta: <strong>Titular</strong>, <strong>Conyuge</strong>, <strong>Hijo</strong>. 
             Si Edad está vacía se calcula desde Fecha de Nacimiento. 
             Zona es opcional (si no está, se elige globalmente).
+            Costo actual es opcional: lo que paga hoy el grupo familiar (en la fila del titular); se usa en la nómina valorizada.
           </p>
         </div>
       </div>):(<div>

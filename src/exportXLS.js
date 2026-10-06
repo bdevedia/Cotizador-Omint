@@ -593,7 +593,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
   // Hoja Nómina
   if(emps&&emps.length>0){
     const BC={font:{name:"Calibri",sz:10},alignment:{horizontal:"center",vertical:"center"}};
-    const wsNom=XLSX.utils.json_to_sheet(emps);
+    const wsNom=XLSX.utils.json_to_sheet(emps.map(e=>{const r={...e};delete r.MIEMBROS;return r;}));
     const nomRange=XLSX.utils.decode_range(wsNom["!ref"]||"A1");
     for(let nr=nomRange.s.r;nr<=nomRange.e.r;nr++){
       for(let nc=nomRange.s.c;nc<=nomRange.e.c;nc++){

@@ -4,7 +4,7 @@ import { OSDE_CATS, EMPTY_OSDE, BANDA, PRECIO_COLS, ZONA_IDS } from "./constants
 
 // ── PARSER DE NÓMINA (formato fijo) ─────────────────────────────────────────
 // Columnas requeridas: "Grupo Familiar", "Tipo benef", y al menos una de "Edad" | "Fecha de Nacimiento"
-// Columnas opcionales: "Nombre", "Plan de contratación", "Zona"
+// Columnas opcionales: "Nombre", "Plan de contratación", "Zona", "Costo actual"
 // Tipo benef acepta: Titular/T, Conyuge/Cónyuge/C, Hijo/H
 
 const REQUIRED_COLS_HINTS=[
@@ -16,6 +16,28 @@ const EDAD_COL_HINTS=["edad","age","años"];
 const FECHA_COL_HINTS=["fecha de nacimiento","fecha nacimiento","fecha_nacimiento","nacimiento","birth","fecha nac","fec nac"];
 const ZONA_COL_HINTS=["zona","provincia","region","localidad"];
 const NOMBRE_COL_HINTS=["nombre","name","titular","apellido","empleado","apellido y nombre"];
+const COSTO_COL_HINTS=["costo actual","costo","cuota actual","importe actual","cuota","importe"];
+
+// Importe de la nómina: acepta números o texto con formato ("$ 1.835.664,99", "$1,835,664.99")
+function parseMonto(v){
+  if(v==null||v==="")return null;
+  if(typeof v==="number")return isFinite(v)?v:null;
+  let s=String(v).replace(/[^0-9.,-]/g,"");
+  if(!s||s==="-")return null;
+  const lastDot=s.lastIndexOf("."),lastComma=s.lastIndexOf(",");
+  if(lastDot>=0&&lastComma>=0){
+    // El último separador es el decimal
+    s=lastComma>lastDot?s.replace(/\./g,"").replace(",","."):s.replace(/,/g,"");
+  }else if(lastComma>=0){
+    const parts=s.split(",");
+    s=parts.length===2&&parts[1].length!==3?s.replace(",","."):s.replace(/,/g,"");
+  }else if(lastDot>=0){
+    const parts=s.split(".");
+    if(parts.length>2||parts[1].length===3)s=s.replace(/\./g,"");
+  }
+  const n=parseFloat(s);
+  return isFinite(n)?n:null;
+}
 
 function findColHints(cols,hints){
   const low=cols.map(x=>String(x).toLowerCase().trim());
@@ -60,6 +82,7 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
   const colPlan=findColHints(rawCols,PLAN_COL_HINTS);
   const colZona=findColHints(rawCols,ZONA_COL_HINTS);
   const colNombre=findColHints(rawCols,NOMBRE_COL_HINTS);
+  const colCosto=findColHints(rawCols,COSTO_COL_HINTS);
 
   function getEdad(row){
     if(colEdad){
@@ -100,8 +123,11 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
     const nombre=colNombre?String(row[colNombre]||"").trim():"";
     if(!familias[gid])familias[gid]={GRUPO:gid,NOMBRE:nombre,EDAD_TITULAR:null,
       CONYUGES:[],  // lista de TODAS las edades de conyuges
-      HIJOS_MENORES_25:0,HIJOS_MAYORES_25_EDADES:[],PLAN_ACTUAL:"",ZONA:zona,
-      OSDE_HIJO_26_27:0,OSDE_IND_JOVEN:0,OSDE_IND_MAYOR:0};
+      HIJOS_MENORES_25:0,HIJOS_MAYORES_25_EDADES:[],HIJOS_EDADES:[],PLAN_ACTUAL:"",ZONA:zona,
+      OSDE_HIJO_26_27:0,OSDE_IND_JOVEN:0,OSDE_IND_MAYOR:0,COSTO_ACTUAL:null};
+    // Costo actual: se suma lo informado en cualquier fila del grupo (suele venir en la del titular)
+    const costo=colCosto?parseMonto(row[colCosto]):null;
+    if(costo!==null)familias[gid].COSTO_ACTUAL=(familias[gid].COSTO_ACTUAL||0)+costo;
     if(tipo==="T"){
       // Detectar titular duplicado: ya procesamos un "T" para este grupo
       if(gidsConTitular.has(gid)){
@@ -133,6 +159,7 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
       if(edad!==null)familias[gid].CONYUGES.push(edad);
     }else if(tipo==="H"){
       if(edad===null){filasIgnoradas++;hijosEdadInvalida.push(gid);return;}
+      familias[gid].HIJOS_EDADES.push(edad);
       if(edad<=25)familias[gid].HIJOS_MENORES_25++;
       else familias[gid].HIJOS_MAYORES_25_EDADES.push(edad);
       // OSDE usa 28 como corte: <28 = hijo, >=28 = individual
@@ -164,6 +191,13 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
       OSDE_HIJO_26_27:f.OSDE_HIJO_26_27,
       OSDE_IND_JOVEN:f.OSDE_IND_JOVEN,
       OSDE_IND_MAYOR:f.OSDE_IND_MAYOR,
+      COSTO_ACTUAL:f.COSTO_ACTUAL,
+      // Integrantes considerados en el cálculo (para la nómina valorizada)
+      MIEMBROS:[
+        {parentesco:"T",edad:f.EDAD_TITULAR},
+        ...(primerConyuge>0?[{parentesco:"C",edad:primerConyuge}]:[]),
+        ...f.HIJOS_EDADES.map(edad=>({parentesco:"H",edad})),
+      ],
     });
   });
 
@@ -282,17 +316,17 @@ function downloadOsdeTemplate(){
 function downloadTemplate(){
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([
-    ["Grupo Familiar","Fecha de Nacimiento","Edad","Nombre","Tipo benef","Plan de contratación","Zona"],
-    [1,"08.12.1961",64,"García Juan","Titular","4500_PYME","AMBA"],
-    [1,"01.03.1965",61,"García Ana","Conyuge","4500_PYME","AMBA"],
-    [1,"18.12.2014","","García Lucas","Hijo","4500_PYME","AMBA"],
-    [2,"05.09.1960",65,"López Pedro","Titular","6500_PYME","Córdoba"],
-    [2,"","","-","Conyuge","6500_PYME","Córdoba"],
-    [3,"10.11.1980",45,"Martínez Rosa","Titular","Osde 210","AMBA"],
-    [3,"15.06.1982",42,"Martínez Marcos","Conyuge","Osde 210","AMBA"],
-    [3,"20.03.2008","","Martínez Sofía","Hijo","Osde 210","AMBA"],
+    ["Grupo Familiar","Fecha de Nacimiento","Edad","Nombre","Tipo benef","Plan de contratación","Zona","Costo actual"],
+    [1,"08.12.1961",64,"García Juan","Titular","4500_PYME","AMBA",1250000],
+    [1,"01.03.1965",61,"García Ana","Conyuge","4500_PYME","AMBA",""],
+    [1,"18.12.2014","","García Lucas","Hijo","4500_PYME","AMBA",""],
+    [2,"05.09.1960",65,"López Pedro","Titular","6500_PYME","Córdoba",980000],
+    [2,"","","-","Conyuge","6500_PYME","Córdoba",""],
+    [3,"10.11.1980",45,"Martínez Rosa","Titular","Osde 210","AMBA",870000],
+    [3,"15.06.1982",42,"Martínez Marcos","Conyuge","Osde 210","AMBA",""],
+    [3,"20.03.2008","","Martínez Sofía","Hijo","Osde 210","AMBA",""],
   ]);
-  ws["!cols"]=[{wch:15},{wch:20},{wch:6},{wch:22},{wch:12},{wch:22},{wch:12}];
+  ws["!cols"]=[{wch:15},{wch:20},{wch:6},{wch:22},{wch:12},{wch:22},{wch:12},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws,"Nómina");
   XLSX.writeFile(wb,"template_nomina_omint.xlsx");
 }
