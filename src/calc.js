@@ -24,6 +24,12 @@ function calcBD(emps,map,prices,costos){
   return{rows,totalFac:tf,totalCosto:tc,cfTotal:tf>0?tc/tf*100:0,totalSocios:emps.length,skipped};
 }
 
+// ── MULTIPLICADOR DE AJUSTES ─────────────────────────────────────────────────
+// historial: [{mes:"2025-04", pct:5.2, nota:""}] → producto acumulado de (1+pct/100)
+function calcMultiplier(historial){
+  return (historial||[]).reduce((m,e)=>m*(1+e.pct/100),1);
+}
+
 // ── OSDE COMPARISON ───────────────────────────────────────────────────────────
 function calcOsdeFromEmps(emps,osdePrices){
   const counts={...EMPTY_OSDE};
@@ -72,4 +78,4 @@ function checkPriceInversions(results){
   return violations;
 }
 
-export { calcBD, calcOsdeFromEmps, checkPriceInversions };
+export { calcBD, calcMultiplier, calcOsdeFromEmps, checkPriceInversions };

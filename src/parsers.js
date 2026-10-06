@@ -28,7 +28,7 @@ function calcEdadDesde(fechaStr){
   const s=String(fechaStr).trim();
   // Soporta: DD.MM.YYYY, DD/MM/YYYY, YYYY-MM-DD, timestamp numérico Excel
   let d;
-  const parts=s.split(/[.\-\/]/);
+  const parts=s.split(/[./-]/);
   if(parts.length===3){
     if(parts[0].length===4)d=new Date(+parts[0],+parts[1]-1,+parts[2]);
     else d=new Date(+parts[2],+parts[1]-1,+parts[0]);
@@ -133,15 +133,13 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
       if(edad!==null)familias[gid].CONYUGES.push(edad);
     }else if(tipo==="H"){
       if(edad===null){filasIgnoradas++;hijosEdadInvalida.push(gid);return;}
-      if(true){
-        if(edad<=25)familias[gid].HIJOS_MENORES_25++;
-        else familias[gid].HIJOS_MAYORES_25_EDADES.push(edad);
-        // OSDE usa 28 como corte: <28 = hijo, >=28 = individual
-        if(edad<28){
-          if(edad>25)familias[gid].OSDE_HIJO_26_27++; // 26-27: FAC en Omint, hijo en OSDE
-        }else if(edad<=35){familias[gid].OSDE_IND_JOVEN++;}
-        else{familias[gid].OSDE_IND_MAYOR++;}
-      }
+      if(edad<=25)familias[gid].HIJOS_MENORES_25++;
+      else familias[gid].HIJOS_MAYORES_25_EDADES.push(edad);
+      // OSDE usa 28 como corte: <28 = hijo, >=28 = individual
+      if(edad<28){
+        if(edad>25)familias[gid].OSDE_HIJO_26_27++; // 26-27: FAC en Omint, hijo en OSDE
+      }else if(edad<=35){familias[gid].OSDE_IND_JOVEN++;}
+      else{familias[gid].OSDE_IND_MAYOR++;}
     }
   });
 

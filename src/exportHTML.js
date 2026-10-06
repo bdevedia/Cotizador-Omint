@@ -1,5 +1,5 @@
 import { ZONA_COLORS, OMINT_LOGO, CATS } from "./constants";
-import { fmt, fmtPDF, fechaLarga } from "./utils";
+import { fmtPDF, fechaLarga } from "./utils";
 
 function generateProposalHTML(cfg,results){
   const {empresa,fecha,validez,formato,planesNombres,textoExtra}=cfg;

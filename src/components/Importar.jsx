@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER } from "../constants";
-import { btnP, btnS, card } from "../styles";
+import { btnS, card } from "../styles";
 import { parsePreciosFile, parseCostosFile } from "../parsers";
 
 // ── IMPORTAR ──────────────────────────────────────────────────────────────────

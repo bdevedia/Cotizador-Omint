@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FONT, BLUE, BORDER, CATS, EMPTY_CATS } from "../constants";
-import { fmt } from "../utils";
-import { btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
+import { btnP, btnS, inp, card, TH, TD } from "../styles";
 import AjusteHistorial from "./AjusteHistorial";
 
 // ── COSTOS VIGENTES ───────────────────────────────────────────────────────────
@@ -10,7 +9,11 @@ function CostosVigentes({costos,onSave,ajustes=[],onAjusteUpdate}){
   const [plan,setPlan]=useState(plans[0]||null);
   const [loc,setLoc]=useState({});const[ok,setOk]=useState(false);
   const selPlan=plans.includes(plan)?plan:(plans[0]||null);
-  useEffect(()=>{setLoc({...EMPTY_CATS,...(costos?.[selPlan]||{})});},[selPlan,costos]);
+  const [synced,setSynced]=useState(null);
+  if(!synced||synced.plan!==selPlan||synced.src!==costos){
+    setSynced({plan:selPlan,src:costos});
+    setLoc({...EMPTY_CATS,...(costos?.[selPlan]||{})});
+  }
   function save(){const nxt={...costos,[selPlan]:{...loc}};onSave(nxt);setOk(true);setTimeout(()=>setOk(false),2500);}
   return(<div>
     <h2 style={{fontSize:22,fontWeight:700,color:"#7C3AED",marginBottom:4,fontFamily:FONT}}>Costos Vigentes</h2>

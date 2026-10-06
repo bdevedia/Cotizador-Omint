@@ -97,7 +97,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     row++;
 
     const distPlanFirstRow=row;
-    zResults.forEach((res,pi)=>{
+    zResults.forEach(res=>{
       p(0,row,res.planVigente||res.planId,fBOLD,FILL_GRAY,aC,BORDER_ALL);
       let planTot=0;
       CAT_KEYS.forEach((k,ci)=>{

@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER, ZONA_IDS, ZONA_COLORS, CATS, EMPTY_CATS } from "../constants";
-import { fmt } from "../utils";
-import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
+import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import AjusteHistorial from "./AjusteHistorial";
 
 // ── PRECIOS VIGENTES ──────────────────────────────────────────────────────────
@@ -12,7 +11,11 @@ function PreciosVigentes({precios,onSave,ajustes=[],onAjusteUpdate}){
   const [loc,setLoc]=useState({});const[ok,setOk]=useState(false);
   const planList=Object.keys(precios?.[zona]||{}).sort();
   const selPlan=planList.includes(plan)?plan:(planList[0]||null);
-  useEffect(()=>{if(selPlan)setLoc({...EMPTY_CATS,...(precios?.[zona]?.[selPlan]||{})});},[zona,selPlan,precios]);
+  const [synced,setSynced]=useState(null);
+  if(selPlan&&(!synced||synced.zona!==zona||synced.plan!==selPlan||synced.src!==precios)){
+    setSynced({zona,plan:selPlan,src:precios});
+    setLoc({...EMPTY_CATS,...(precios?.[zona]?.[selPlan]||{})});
+  }
   function save(){const nxt=JSON.parse(JSON.stringify(precios||{}));if(!nxt[zona])nxt[zona]={};nxt[zona][selPlan]={...loc};onSave(nxt);setOk(true);setTimeout(()=>setOk(false),2500);}
   const zc=ZONA_COLORS[zona]||{c:BLUE,bg:BLUE_LT};
   // Precio de referencia para AjusteHistorial: AMBA, primer plan, categoría s0_25

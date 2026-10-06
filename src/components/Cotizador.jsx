@@ -4,7 +4,7 @@ import { FONT, BLUE, BLUE_LT, BORDER, GRAY,
   CATS, CAT_IDS, EMPTY_CATS,
   ZONA_IDS, ZONA_COLORS,
   OSDE_CATS, EMPTY_OSDE, MEJORAS_DEF } from "../constants";
-import { catAge, cfColor, cfBg, cfLabel, fmt, fmtD, exJSON, stripJ, planTier } from "../utils";
+import { cfColor, cfBg, cfLabel, fmt, planTier } from "../utils";
 import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
 import { calcBD, calcOsdeFromEmps, checkPriceInversions } from "../calc";
@@ -94,9 +94,7 @@ function DuplicadosModal({items,onResolve}){
 function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
-  const [cols,setCols]=useState([]);
   const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});
-  const [globalZona,setGlobalZona]=useState("AMBA");
   const [forcedZona,setForcedZona]=useState(null);
   const [planMapping,setPlanMapping]=useState({});
   const [adjPrices,setAdjPrices]=useState({});
@@ -111,7 +109,6 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const [saveMsg,setSaveMsg]=useState("");
   const [aiLog,setAiLog]=useState([]); // log de cambios de IA
   const [scenarios,setScenarios]=useState({}); // {name: {adjPrices, adjCostos}}
-  const [showScenarios,setShowScenarios]=useState(false);
   const [nomErrors,setNomErrors]=useState([]); // validación de nómina
   const [spouseWarning,setSpouseWarning]=useState(null); // advertencia cónyuges múltiples
   const [dupWarning,setDupWarning]=useState(null); // {items, rawRows, rawCols} — titulares duplicados
@@ -125,7 +122,6 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
 
   const isOmintPlan=p=>Object.values(precios||{}).some(z=>z[p]);
   const externalPlans=emps&&map.planCol?[...new Set(emps.map(e=>e[map.planCol]).filter(Boolean))]:[];
-  const hasZonaCol=map.zonaCol&&map.zonaCol!=="";
   const needsMapeo=externalPlans.some(p=>!isOmintPlan(p));
 
   function getEmpZona(e){
@@ -133,10 +129,6 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
     const col=map.zonaCol;
     if(col&&e[col]&&e[col].toString().trim()){const z=e[col].toString().trim();return ZONA_IDS.find(zi=>zi.toLowerCase()===z.toLowerCase())||"AMBA";}
     return "AMBA";
-  }
-  function getEmpPlan(e){
-    if(!map.planCol||!e[map.planCol])return null;
-    const ext=e[map.planCol];return isOmintPlan(ext)?ext:(planMapping[ext]||null);
   }
 
   function buildGroups(){
@@ -224,7 +216,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
           return; // esperar decisión del usuario
         }
         applyParsedResult(result);
-      }catch(err){
+      }catch{
         setNomErrors([{tipo:"error",msg:"Error al leer el archivo. Revisá el template."}]);
       }
     };
@@ -233,7 +225,6 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
 
   function applyParsedResult(result){
         setEmps(result.rows);
-        setCols(Object.keys(result.rows[0]));
         setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
         const info=`✓ ${result.rows.length} familias cargadas (${result.totalRaw} filas procesadas${result.filasIgnoradas>0?`, ${result.filasIgnoradas} ignoradas`:""})`;
         const warns=[];
@@ -430,7 +421,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       </div>):(<div>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#D1FAE5",borderRadius:8,marginBottom:"1.25rem",border:"1px solid #A7F3D0"}}>
           <span>✅</span><span style={{fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{emps.length} empleados cargados</span>
-          <button onClick={()=>{setEmps(null);setCols([]);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});setPlanMapping({});setNomErrors([]);}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",color:"#9CA3AF",fontFamily:FONT}}>✕ Cambiar</button>
+          <button onClick={()=>{setEmps(null);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});setPlanMapping({});setNomErrors([]);}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",color:"#9CA3AF",fontFamily:FONT}}>✕ Cambiar</button>
         </div>
       </div>)}
 

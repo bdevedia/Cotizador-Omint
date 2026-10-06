@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER, ZONA_COLORS } from "../constants";
-import { fmt, fmtD } from "../utils";
 import { badge, btnP, btnS, inp } from "../styles";
 import { generateProposalHTML } from "../exportHTML";
 import { exportAnalisisXLS } from "../exportXLS";

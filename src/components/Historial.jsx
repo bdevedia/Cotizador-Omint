@@ -1,7 +1,7 @@
 import { useState, Fragment } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER, GRAY, ZONA_COLORS } from "../constants";
 import { fmt, fmtD, cfColor, cfBg } from "../utils";
-import { badge, btnP, btnS, card, TH, TD } from "../styles";
+import { badge, card, TH, TD } from "../styles";
 
 // ── HISTORIAL ─────────────────────────────────────────────────────────────────
 function Historial({quotes,onUpdate,onDelete,onRenameEmpresa}){
