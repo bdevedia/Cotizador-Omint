@@ -54,11 +54,12 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMapping
           <div>
             <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Formato de precios (PDF y nómina valorizada)</label>
             <div style={{display:"flex",gap:10}}>
-              {[{v:"nchoice",l:"N-Choice (7 categorías)"},{v:"capitados",l:"Precios capitados (0-54 · 55-59 · 60+)"}].map(o=>(
+              {[{v:"nchoice",l:"N-Choice (7 categorías)"},{v:"capitados2",l:"Capitados 0-59 · 60+"},{v:"capitados",l:"Capitados 0-54 · 55-59 · 60+"}].map(o=>(
                 <button key={o.v} onClick={()=>upd("formato",o.v)} style={{...cfg.formato===o.v?btnP:btnS,flex:1,textAlign:"center"}}>{o.l}</button>
               ))}
             </div>
-            {cfg.formato==="capitados"&&<p style={{fontSize:11,color:"#6B7280",marginTop:6,fontFamily:FONT}}>El precio "0 a 54" es el promedio de 00-25, 26-35 y 36-54 ponderado según la distribución de la nómina. En la nómina valorizada cada integrante (hijos incluidos) se cobra según su edad: 0-54, 55-59 o 60+.</p>}
+            {cfg.formato==="capitados2"&&<p style={{fontSize:11,color:"#6B7280",marginTop:6,fontFamily:FONT}}>El precio "0 a 59" es ponderado: el precio de cada rango menor de 60 (hijos incluidos) por la cantidad de personas de la nómina en ese rango. En la nómina valorizada cada integrante se cobra según su edad: 0-59 o 60+.</p>}
+            {cfg.formato==="capitados"&&<p style={{fontSize:11,color:"#6B7280",marginTop:6,fontFamily:FONT}}>El precio "0 a 54" es ponderado: el precio de 00-25, 26-35 y 36-54 por la cantidad de personas de la nómina en cada rango. En la nómina valorizada cada integrante (hijos incluidos) se cobra según su edad: 0-54, 55-59 o 60+.</p>}
           </div>
           <div>
             <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Nombre de planes (en la propuesta)</label>

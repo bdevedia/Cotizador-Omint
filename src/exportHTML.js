@@ -1,12 +1,12 @@
 import { OMINT_LOGO_WHITE } from "./logoWhite";
 import { fmtPDF } from "./utils";
-import { capitado054 } from "./calc";
+import { capitado054, capitado059 } from "./calc";
 
 // ── PROPUESTA ECONÓMICA (PDF) ─────────────────────────────────────────────────
-// Dos modalidades, según la empresa:
-//  - "nchoice":   precios por las 7 categorías (adultos por rango de edad + hijos)
-//  - "capitados": precios capitados 0-54 / 55-59 / 60+
-//    El 0-54 es el promedio de 00-25, 26-35 y 36-54 ponderado por la distribución de la nómina.
+// Modalidades, según la empresa:
+//  - "nchoice":    precios por las 7 categorías (adultos por rango de edad + hijos)
+//  - "capitados2": precios capitados 0-59 / 60+ (0-59 ponderado por la nómina, hijos incluidos)
+//  - "capitados":  precios capitados 0-54 / 55-59 / 60+ (0-54 ponderado sobre 00-25, 26-35 y 36-54)
 
 const MESES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
@@ -31,7 +31,7 @@ function precio(r,id){return r.bd.rows.find(x=>x.id===id)?.precio||0;}
 
 function generateProposalHTML(cfg,results){
   const {empresa,fecha,validez,formato,planesNombres,textoExtra}=cfg;
-  const capitados=formato==="capitados";
+  const capitados=formato==="capitados"||formato==="capitados2";
 
   // Deduplicar por plan cotizado (cotId) — igual que Excel: precios únicos por plan cotizado
   const seen=new Set();
@@ -39,7 +39,16 @@ function generateProposalHTML(cfg,results){
   const nombre=r=>(planesNombres||{})[r.adjKey]||r.cotId;
 
   let tabla;
-  if(capitados){
+  if(formato==="capitados2"){
+    tabla=`<table class="t tc">
+      <thead><tr><th class="l">Plan Omint</th><th>0 &ndash; 59</th><th>60 +</th></tr></thead>
+      <tbody>${planes.map((r,i)=>`<tr class="${i%2?"odd":"even"}">
+        <td class="l">${planHTML(nombre(r))}</td>
+        <td>${fmtPDF(capitado059(r,results))}</td>
+        <td>${fmtPDF(precio(r,"s60plus"))}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  }else if(capitados){
     tabla=`<table class="t tc">
       <thead><tr><th class="l">Plan Omint</th><th>0 &ndash; 54</th><th>55 &ndash; 59</th><th>60 +</th></tr></thead>
       <tbody>${planes.map((r,i)=>`<tr class="${i%2?"odd":"even"}">
