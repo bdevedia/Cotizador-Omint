@@ -52,13 +52,13 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMapping
             </div>
           ))}
           <div>
-            <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Formato de precios</label>
+            <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Formato de precios (PDF y nómina valorizada)</label>
             <div style={{display:"flex",gap:10}}>
               {[{v:"nchoice",l:"N-Choice (7 categorías)"},{v:"capitados",l:"Precios capitados (0-54 · 55-59 · 60+)"}].map(o=>(
                 <button key={o.v} onClick={()=>upd("formato",o.v)} style={{...cfg.formato===o.v?btnP:btnS,flex:1,textAlign:"center"}}>{o.l}</button>
               ))}
             </div>
-            {cfg.formato==="capitados"&&<p style={{fontSize:11,color:"#6B7280",marginTop:6,fontFamily:FONT}}>El precio "0 a 54" es el promedio de 00-25, 26-35 y 36-54 ponderado según la distribución de la nómina.</p>}
+            {cfg.formato==="capitados"&&<p style={{fontSize:11,color:"#6B7280",marginTop:6,fontFamily:FONT}}>El precio "0 a 54" es el promedio de 00-25, 26-35 y 36-54 ponderado según la distribución de la nómina. En la nómina valorizada cada integrante (hijos incluidos) se cobra según su edad: 0-54, 55-59 o 60+.</p>}
           </div>
           <div>
             <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Nombre de planes (en la propuesta)</label>
@@ -89,7 +89,7 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMapping
           </div>
           <div style={{display:"flex",gap:10,marginTop:"0.5rem",flexWrap:"wrap"}}>
             <button onClick={exportPDF} style={{...btnP,flex:1}}>📄 Exportar PDF</button>
-            <button onClick={()=>{try{exportNominaValorizadaXLS(results,cfg.empresa,cfg.planesNombres,cfg.fecha);}catch(e){alert("Error al exportar la nómina valorizada: "+e.message);}}} style={{...btnS,flex:1}}>🧾 Nómina valorizada</button>
+            <button onClick={()=>{try{exportNominaValorizadaXLS(results,cfg.empresa,cfg.planesNombres,cfg.fecha,cfg.formato);}catch(e){alert("Error al exportar la nómina valorizada: "+e.message);}}} style={{...btnS,flex:1}}>🧾 Nómina valorizada</button>
             <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef,brokerPct,osde,planMappingOsde,cfg.masaSalarial,mejoras,planMejoras,cfg.planesNombres,adjPct,listas);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel</button>
           </div>
           <p style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT,textAlign:"center"}}>El PDF se abre en una nueva pestaña → usá Ctrl+P o Cmd+P para guardar como PDF</p>
