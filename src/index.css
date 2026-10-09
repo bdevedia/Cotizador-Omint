@@ -37,6 +37,7 @@
 input,
 select,
 textarea {
+  color-scheme: light;
   background-color: #fff;
   color: #111827;
 }
