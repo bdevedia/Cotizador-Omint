@@ -42,11 +42,15 @@ function pctAjuste(adj,catId){
 // ── PRECIOS CAPITADOS ─────────────────────────────────────────────────────────
 function precio(r,id){return r.bd.rows.find(x=>x.id===id)?.precio||0;}
 
-// Precio ponderado de un grupo de rangos: precio de cada rango × cantidad de personas de la
-// nómina en ese rango, dividido el total (sumando todas las zonas del plan cotizado).
+// Precio ponderado de un grupo de rangos: SUMAPRODUCTO de la proporción de cada rango sobre el
+// total del grupo y su precio. Las proporciones salen de la distribución de TODA la nómina de
+// la zona (como la fila "RANGO 0-59" del Excel), no solo de las personas asignadas a este plan.
+// En simulación cada plan ya cotiza la nómina completa, así que se toma una sola vez.
 // Sin personas en esos rangos, promedio simple.
 function ponderado(r,results,ids){
-  const counts=ids.map(id=>results.filter(x=>x.cotId===r.cotId)
+  const enZona=results.filter(x=>x.zona===r.zona);
+  const nomina=enZona.some(x=>x.sim)?enZona.slice(0,1):enZona;
+  const counts=ids.map(id=>nomina
     .reduce((a,x)=>a+(x.bd.rows.find(y=>y.id===id)?.count||0),0));
   const tot=counts.reduce((a,b)=>a+b,0);
   if(tot===0)return ids.reduce((a,id)=>a+precio(r,id),0)/ids.length;
