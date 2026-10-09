@@ -7,7 +7,8 @@ import { preciosCapitados } from "./calc";
 // Los costos van en la fila del titular (por grupo familiar). El costo nuevo usa los precios
 // efectivos de la cotización según el formato de la propuesta:
 //  - "nchoice":   por categoría, con la misma lógica que calcBD (hijos <=25 como Hijo 1 / 2+)
-//  - "capitados": cada integrante por su edad: 0-54, 55-59 o 60+ (hijos incluidos)
+//  - "capitados2": cada integrante por su edad: 0-59 o 60+ (hijos incluidos)
+//  - "capitados":  cada integrante por su edad: 0-54, 55-59 o 60+ (hijos incluidos)
 // Equivalencias: una hoja. Simulación: una hoja por plan simulado.
 
 const FILL_ACTUAL={fgColor:{rgb:"DAE3F3"},patternType:"solid"};
@@ -31,10 +32,11 @@ function precioFamilia(e,precios){
   return tot;
 }
 
-// Precio del grupo familiar con precios capitados: cada integrante según su edad
-function precioFamiliaCapitado(e,cap){
+// Precio del grupo familiar con precios capitados: cada integrante según su edad.
+// dosFranjas: 0-59 / 60+; si no, 0-54 / 55-59 / 60+
+function precioFamiliaCapitado(e,cap,dosFranjas=false){
   const miembros=e.MIEMBROS||[{edad:e.EDAD_TITULAR},...(e.EDAD_CONYUGE>0?[{edad:e.EDAD_CONYUGE}]:[])];
-  return miembros.reduce((a,m)=>a+(m.edad>=60?cap.c60:m.edad>=55?cap.c5559:cap.c054),0);
+  return miembros.reduce((a,m)=>a+(m.edad>=60?cap.c60:dosFranjas?cap.c059:m.edad>=55?cap.c5559:cap.c054),0);
 }
 
 function sortGrupo(a,b){
@@ -112,14 +114,15 @@ function buildSheet(items,titulo){
 }
 
 function exportNominaValorizadaXLS(results,empresa,planesNombres,fecha,formato="nchoice"){
-  const capitados=formato==="capitados";
+  const capitados=formato==="capitados"||formato==="capitados2";
+  const dosFranjas=formato==="capitados2";
   const nombre=r=>(planesNombres||{})[r.adjKey]||r.cotId;
   const itemsDe=rs=>rs.flatMap(r=>{
     const precios=Object.fromEntries(r.bd.rows.map(x=>[x.id,x.precio]));
     const cap=capitados?preciosCapitados(r,results):null;
-    return r.empList.map(fam=>({fam,plan:nombre(r),precio:capitados?precioFamiliaCapitado(fam,cap):precioFamilia(fam,precios)}));
+    return r.empList.map(fam=>({fam,plan:nombre(r),precio:capitados?precioFamiliaCapitado(fam,cap,dosFranjas):precioFamilia(fam,precios)}));
   });
-  const titulo=`Nómina Valorizada${empresa?` — ${empresa}`:""} · ${capitados?"Precios capitados":"N-Choice"}`;
+  const titulo=`Nómina Valorizada${empresa?` — ${empresa}`:""} · ${dosFranjas?"Precios capitados 0-59 / 60+":capitados?"Precios capitados 0-54 / 55-59 / 60+":"N-Choice"}`;
   const wb=XLSX.utils.book_new();
   if(results.some(r=>r.sim)){
     const planes=[...new Set(results.map(r=>r.cotId))];
