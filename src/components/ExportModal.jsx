@@ -6,7 +6,7 @@ import { exportNominaValorizadaXLS } from "../exportNominaValorizada";
 import { exportAnalisisXLS } from "../exportXLS";
 
 // ── MODAL EXPORTAR ────────────────────────────────────────────────────────────
-function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMappingOsde,planMejoras,mejoras,planCustomNames,adjPct}){
+function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMappingOsde,planMejoras,mejoras,planCustomNames,adjPct,listas}){
   const [cfg,setCfg]=useState({
     empresa:empresa||"",
     fecha:new Date().toISOString().split("T")[0],
@@ -90,7 +90,7 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMapping
           <div style={{display:"flex",gap:10,marginTop:"0.5rem",flexWrap:"wrap"}}>
             <button onClick={exportPDF} style={{...btnP,flex:1}}>📄 Exportar PDF</button>
             <button onClick={()=>{try{exportNominaValorizadaXLS(results,cfg.empresa,cfg.planesNombres,cfg.fecha);}catch(e){alert("Error al exportar la nómina valorizada: "+e.message);}}} style={{...btnS,flex:1}}>🧾 Nómina valorizada</button>
-            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef,brokerPct,osde,planMappingOsde,cfg.masaSalarial,mejoras,planMejoras,cfg.planesNombres,adjPct);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel</button>
+            <button onClick={()=>{try{exportAnalisisXLS(results,cfg.empresa,empsRef,brokerPct,osde,planMappingOsde,cfg.masaSalarial,mejoras,planMejoras,cfg.planesNombres,adjPct,listas);onClose();}catch(e){alert("Error al exportar Excel: "+e.message);}}} style={{...btnS,flex:1}}>📊 Exportar Excel</button>
           </div>
           <p style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT,textAlign:"center"}}>El PDF se abre en una nueva pestaña → usá Ctrl+P o Cmd+P para guardar como PDF</p>
         </div>

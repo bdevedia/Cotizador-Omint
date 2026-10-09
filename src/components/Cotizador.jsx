@@ -459,7 +459,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
   const sDef=[{n:1,l:"Nómina"},{n:2,l:isSim?"Planes":"Mapeo"},{n:3,l:"Comisión"},{n:4,l:"Cotización"}];
 
   return(<div>
-    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}} planCustomNames={planCustomNames} adjPct={adjPct}/>}
+    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}} planCustomNames={planCustomNames} adjPct={adjPct} listas={{precios,costos}}/>}
     {dupWarning&&<DuplicadosModal items={dupWarning.items} onResolve={resolveDuplicados}/>}
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
