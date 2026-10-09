@@ -30,6 +30,15 @@ function calcMultiplier(historial){
   return (historial||[]).reduce((m,e)=>m*(1+e.pct/100),1);
 }
 
+// ── AJUSTE DE PRECIOS ─────────────────────────────────────────────────────────
+// Ajuste de un plan cotizado: {modo:"rango059", pct059, pct60} (0-59 y 60+)
+// o {modo:"rango", cats:{s0_25:pct,...}} (un % por rango). pct en decimal (-0.1 = -10%).
+function pctAjuste(adj,catId){
+  if(!adj)return 0;
+  if(adj.modo==="rango")return adj.cats?.[catId]||0;
+  return (catId==="s60plus"?adj.pct60:adj.pct059)||0;
+}
+
 // ── OSDE COMPARISON ───────────────────────────────────────────────────────────
 function calcOsdeFromEmps(emps,osdePrices){
   const counts={...EMPTY_OSDE};
@@ -78,4 +87,4 @@ function checkPriceInversions(results){
   return violations;
 }
 
-export { calcBD, calcMultiplier, calcOsdeFromEmps, checkPriceInversions };
+export { calcBD, calcMultiplier, pctAjuste, calcOsdeFromEmps, checkPriceInversions };

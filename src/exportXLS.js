@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx-js-style";
 import { CATS, CAT_IDS, ZONA_IDS, MEJORAS_DEF } from "./constants";
-import { calcOsdeFromEmps } from "./calc";
+import { calcOsdeFromEmps, pctAjuste } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
 function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap,planesNombres,adjPct){
@@ -184,27 +184,53 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     p(8,row,"Hijo 2 o +",fBOLD,null,aC,BORDER_ALL);
     row++;
 
-    // Pre-calcular índices por plan Omint único
-    // Layout: [M price rows] [spacer] [ajuste_hdr1] [ajuste_hdr2] [M ajuste rows]
+    // Pre-calcular índices por plan cotizado único
+    // Layout: [M filas de precios] [spacer] [header ajustes por rango] [M filas ajustes por rango]
+    //         [spacer] [ajuste_hdr1] [ajuste_hdr2] [M filas ajuste 0-59/60+ y resumen]
     const M=uniqueOmint.length;
     const basePriceRowMap={};
     uniqueOmint.forEach((res,pi)=>{basePriceRowMap[res.cotId]=row+pi;});
+    const adjCatRowMap={};
+    uniqueOmint.forEach((res,pi)=>{adjCatRowMap[res.cotId]=row+M+2+pi;});
     const adjRowMap={};
-    uniqueOmint.forEach((res,pi)=>{adjRowMap[res.cotId]=row+M+1+2+pi;});
+    uniqueOmint.forEach((res,pi)=>{adjRowMap[res.cotId]=row+2*M+5+pi;});
     const dP=distPctRowIdx;
     const rP=rango059PctRowIdx;
+    // Columnas de categoría en la hoja: B-F adultos, H-I hijos
+    const CAT_COL={s0_25:1,s26_34:2,s35_54:3,s55_59:4,s60plus:5,h1:7,h2plus:8};
 
-    // ── Filas de precios (una por plan Omint único) ──
+    // ── Filas de precios (una por plan cotizado): precio base × (1 + ajuste del rango) ──
     uniqueOmint.forEach((res,pi)=>{
       const pf=planFill(pi);
       const getP=id=>(res.basePreciosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.precio??0;
-      const adj=adjRowMap[res.cotId];
+      const adjCat=adjCatRowMap[res.cotId];
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
-      [getP("s0_25"),getP("s26_34"),getP("s35_54"),getP("s55_59")].forEach((v,i)=>
-        pF(i+1,row,`${+v.toFixed(0)}*(1+${ea(1,adj)})`,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
-      pF(5,row,`${+getP("s60plus").toFixed(0)}*(1+${ea(2,adj)})`,+getP("s60plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(7,row,`${+getP("h1").toFixed(0)}*(1+${ea(1,adj)})`,+getP("h1").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      pF(8,row,`${+getP("h2plus").toFixed(0)}*(1+${ea(1,adj)})`,+getP("h2plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      Object.entries(CAT_COL).forEach(([id,ci])=>{
+        const v=+getP(id).toFixed(0);
+        const pct=pctAjuste((adjPct||{})[res.adjKey],id);
+        pF(ci,row,`${v}*(1+${ea(ci,adjCat)})`,Math.round(v*(1+pct)),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      });
+      row++;
+    });
+
+    row++; // spacer
+
+    // ── Ajustes por rango: en modo 0-59/60+ apuntan a las celdas de ajuste de abajo ──
+    p(0,row,"Ajustes por rango",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
+    ["00 - 25","26 - 35","36 - 54","55 - 59","60 +"].forEach((h,i)=>p(i+1,row,h,fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL));
+    p(7,row,"Hijo 1",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
+    p(8,row,"Hijo 2 o +",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
+    row++;
+    uniqueOmint.forEach((res,pi)=>{
+      const adjPlan=(adjPct||{})[res.adjKey];
+      const porRango=adjPlan?.modo==="rango";
+      const adj=adjRowMap[res.cotId];
+      p(0,row,planLabel(res),fBOLD,planFill(pi),aC,BORDER_ALL);
+      Object.entries(CAT_COL).forEach(([id,ci])=>{
+        const pct=pctAjuste(adjPlan,id);
+        if(porRango)p(ci,row,pct,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1);
+        else pF(ci,row,`+${ea(id==="s60plus"?2:1,adj)}`,pct,fNorm,null,aC,BORDER_ALL,NF_PCT1);
+      });
       row++;
     });
 
@@ -238,8 +264,14 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const adjPctPlan=(adjPct||{})[res.adjKey]||{};
-      p(1,row,adjPctPlan.pct059||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1);
-      p(2,row,adjPctPlan.pct60||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1);
+      if(adjPctPlan.modo==="rango"){
+        // Ajuste por rango: los % están en la tabla "Ajustes por rango"
+        p(1,row,"por rango",fNorm,FILL_GRAY,aC,BORDER_ALL);
+        p(2,row,"por rango",fNorm,FILL_GRAY,aC,BORDER_ALL);
+      }else{
+        p(1,row,adjPctPlan.pct059||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1);
+        p(2,row,adjPctPlan.pct60||0,fNorm,FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1);
+      }
 
       const precio059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getP(k)||0),0)/tot059:0;
       const precio60=getP("s60plus");
