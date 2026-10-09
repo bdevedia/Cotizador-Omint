@@ -39,6 +39,25 @@ function pctAjuste(adj,catId){
   return (catId==="s60plus"?adj.pct60:adj.pct059)||0;
 }
 
+// ── PRECIOS CAPITADOS ─────────────────────────────────────────────────────────
+function precio(r,id){return r.bd.rows.find(x=>x.id===id)?.precio||0;}
+
+// Precio capitado 0-54: promedio ponderado por la cantidad de socios en 00-25, 26-35 y 36-54
+// del plan (sumando todas sus zonas). Sin socios en esos rangos, promedio simple.
+function capitado054(r,results){
+  const ids=["s0_25","s26_34","s35_54"];
+  const counts=ids.map(id=>results.filter(x=>x.cotId===r.cotId)
+    .reduce((a,x)=>a+(x.bd.rows.find(y=>y.id===id)?.count||0),0));
+  const tot=counts.reduce((a,b)=>a+b,0);
+  if(tot===0)return ids.reduce((a,id)=>a+precio(r,id),0)/ids.length;
+  return ids.reduce((a,id,i)=>a+precio(r,id)*counts[i],0)/tot;
+}
+
+// Precios capitados de un plan cotizado: 0-54 (ponderado), 55-59 y 60+
+function preciosCapitados(r,results){
+  return{c054:capitado054(r,results),c5559:precio(r,"s55_59"),c60:precio(r,"s60plus")};
+}
+
 // ── OSDE COMPARISON ───────────────────────────────────────────────────────────
 function calcOsdeFromEmps(emps,osdePrices){
   const counts={...EMPTY_OSDE};
@@ -87,4 +106,4 @@ function checkPriceInversions(results){
   return violations;
 }
 
-export { calcBD, calcMultiplier, pctAjuste, calcOsdeFromEmps, checkPriceInversions };
+export { calcBD, calcMultiplier, pctAjuste, capitado054, preciosCapitados, calcOsdeFromEmps, checkPriceInversions };
