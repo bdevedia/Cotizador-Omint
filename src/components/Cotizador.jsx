@@ -7,8 +7,9 @@ import { FONT, BLUE, BLUE_LT, BORDER, GRAY,
 import { cfColor, cfBg, cfLabel, fmt, planTier } from "../utils";
 import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
-import { calcBD, calcOsdeFromEmps, checkPriceInversions } from "../calc";
+import { calcBD, pctAjuste, calcOsdeFromEmps, checkPriceInversions } from "../calc";
 import ExportModal from "./ExportModal";
+import AjustePrecios from "./AjustePrecios";
 
 // ── MODAL TITULARES DUPLICADOS ────────────────────────────────────────────────
 function DuplicadosModal({items,onResolve}){
@@ -99,7 +100,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const [planMapping,setPlanMapping]=useState({});
   const [adjPrices,setAdjPrices]=useState({});
   const [adjCostos,setAdjCostos]=useState({});
-  const [adjPct,setAdjPct]=useState({}); // {adjKey: {pct059, pct60}} — ajuste IA exacto para Excel
+  const [adjPct,setAdjPct]=useState({}); // {adjKey: ajuste} — ver pctAjuste en calc.js; lo usa el Excel
   const [empresa,setEmpresa]=useState("");
   const [showSug,setShowSug]=useState(false);
   const [showExport,setShowExport]=useState(false);
@@ -121,10 +122,10 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   // o "simulacion" (toda la nómina cotizada en cada uno de los planes elegidos)
   const [modo,setModo]=useState("equivalencia");
   const [planesSim,setPlanesSim]=useState([]); // ids de planes cotizados (plan Omint u opción con mejoras)
-  // Opciones con mejoras: un plan Omint base + mejoras fijas, cotizado como un plan aparte
-  // (ej. "8500_PYME+Farmacia60%" junto al 8500_PYME). {id, planId, mejoras:{farmacia:"60%"}}
+  // Copias de planes: el mismo plan Omint cotizado otra vez como un plan aparte (ej. 8500_PYME-2,
+  // para cotizarlo con otras mejoras o ajustes). {id, planId, mejoras}
   const [variantes,setVariantes]=useState([]);
-  const [nuevaVar,setNuevaVar]=useState({planId:"",mejoras:{}});
+  const [planADuplicar,setPlanADuplicar]=useState("");
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
@@ -144,14 +145,14 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
     const v=varPorId[id];
     return v?{planId:v.planId,cotId:v.id}:{planId:id,cotId:id};
   }
-  function agregarVariante(){
-    const {planId,mejoras:mej}=nuevaVar;
-    const sel=MEJORAS_DEF.filter(m=>mej[m.id]);
-    if(!planId||sel.length===0)return;
-    const id=[planId,...sel.map(m=>`${m.label}${mej[m.id]}`.replace(/\s+/g,""))].join("+");
-    if(varPorId[id]||allOmintPlans.includes(id)){alert(`Ya existe la opción ${id}.`);return;}
-    setVariantes(prev=>[...prev,{id,planId,mejoras:Object.fromEntries(sel.map(m=>[m.id,mej[m.id]]))}]);
-    setNuevaVar({planId:"",mejoras:{}});
+  function duplicarPlan(planId){
+    if(!planId)return;
+    let n=2;
+    while(varPorId[`${planId}-${n}`]||allOmintPlans.includes(`${planId}-${n}`))n++;
+    const id=`${planId}-${n}`;
+    setVariantes(prev=>[...prev,{id,planId,mejoras:{}}]);
+    if(isSim)setPlanesSim(prev=>[...prev,id]); // en simulación la copia queda elegida
+    setPlanADuplicar("");
   }
   function quitarVariante(id){
     setVariantes(prev=>prev.filter(v=>v.id!==id));
@@ -160,6 +161,30 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   }
   // Con más de un plan simulado los totales no se suman: cada plan es una alternativa para toda la nómina
   const multiSim=isSim&&planesSim.length>1;
+
+  // Aplica un ajuste de precios (0-59/60+ o por rango) a un plan cotizado, sobre su precio de lista
+  function aplicarAjuste(r,adj){
+    const base=precios?.[r.zona]?.[r.planId]||{};
+    const sinAjuste=CAT_IDS.every(id=>!pctAjuste(adj,id));
+    if(sinAjuste){
+      // Sin %: precios de lista. Se recuerda el modo "por rango" para que no vuelva solo a 0-59/60+
+      setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});
+      setAdjPct(prev=>{const n={...prev};if(adj?.modo==="rango")n[r.adjKey]=adj;else delete n[r.adjKey];return n;});
+      return;
+    }
+    const u=Object.fromEntries(CAT_IDS.map(id=>[id,Math.round((base[id]||0)*(1+pctAjuste(adj,id))*100)/100]));
+    setAdjPrices(prev=>({...prev,[r.adjKey]:u}));
+    setAdjPct(prev=>({...prev,[r.adjKey]:adj}));
+  }
+  // Precio escrito a mano en la tabla: se guarda como % de ese rango para que el Excel lo refleje
+  function setPrecioManual(r,catId,v){
+    const b=precios?.[r.zona]?.[r.planId]?.[catId]||0;
+    if(b<=0){setAdjPrices(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[catId]:v}}));return;}
+    const cur=adjPct[r.adjKey];
+    const cats=Object.fromEntries(CAT_IDS.map(id=>[id,pctAjuste(cur,id)]));
+    cats[catId]=v/b-1;
+    aplicarAjuste(r,{modo:"rango",cats});
+  }
 
   function getEmpZona(e){
     if(forcedZona) return forcedZona;
@@ -393,7 +418,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
               u[id]=Math.round(base*(1+pct)*100)/100;
             });
             setAdjPrices(prev=>({...prev,[ak]:u}));
-            setAdjPct(prev=>({...prev,[ak]:{pct059,pct60}}));
+            setAdjPct(prev=>({...prev,[ak]:{modo:"rango059",pct059,pct60}}));
             updCount++;
           }catch(e){console.error("JSON parse error",e);}
         });
@@ -558,32 +583,23 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
             })}
           </div>)}
       </div>
-      {/* OPCIONES CON MEJORAS */}
-      {(()=>{
-        const mejConOpc=MEJORAS_DEF.filter(m=>Object.keys((mejoras||{})[m.id]||{}).length>0);
-        return(<div style={{...card(),marginTop:"1rem"}}>
-          <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Opciones con mejoras</p>
-          <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar un mismo plan con y sin mejoras (ej. 8500_PYME y 8500_PYME con Farmacia 60%). Cada opción es un plan aparte: tiene sus propios ajustes, costo y fila en los exportes. El precio arranca igual al del plan base.</p>
-          {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
-            {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
-              {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar opción" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
-            </span>)}
-          </div>}
-          {mejConOpc.length===0
-            ?<p style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>No hay mejoras cargadas. Cargalas en "Mejoras".</p>
-            :(<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8}}>
-              <select value={nuevaVar.planId} onChange={e=>setNuevaVar(p=>({...p,planId:e.target.value}))} style={{...inp,width:160}}>
-                <option value="">Plan base…</option>
-                {allOmintPlans.map(id=><option key={id} value={id}>{id}</option>)}
-              </select>
-              {mejConOpc.map(m=>(<select key={m.id} value={nuevaVar.mejoras[m.id]||""} onChange={e=>setNuevaVar(p=>({...p,mejoras:{...p.mejoras,[m.id]:e.target.value}}))} style={{...inp,width:"auto"}}>
-                <option value="">{m.label}: no</option>
-                {Object.keys(mejoras[m.id]).map(o=><option key={o} value={o}>{m.label} {o}</option>)}
-              </select>))}
-              <button onClick={agregarVariante} disabled={!nuevaVar.planId||!MEJORAS_DEF.some(m=>nuevaVar.mejoras[m.id])} style={{...btnS,fontSize:12,opacity:!nuevaVar.planId||!MEJORAS_DEF.some(m=>nuevaVar.mejoras[m.id])?0.5:1}}>+ Agregar opción</button>
-            </div>)}
-        </div>);
-      })()}
+      {/* DUPLICAR PLAN */}
+      <div style={{...card(),marginTop:"1rem"}}>
+        <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Duplicar plan</p>
+        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: en la cotización le elegís mejoras, ajustes y el nombre que va en la propuesta.</p>
+        {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+          {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
+            {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar copia" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
+          </span>)}
+        </div>}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <select value={planADuplicar} onChange={e=>setPlanADuplicar(e.target.value)} style={{...inp,width:200}}>
+            <option value="">Elegí un plan…</option>
+            {allOmintPlans.map(id=><option key={id} value={id}>{id}</option>)}
+          </select>
+          <button onClick={()=>duplicarPlan(planADuplicar)} disabled={!planADuplicar} style={{...btnS,fontSize:12,opacity:planADuplicar?1:0.5}}>⧉ Duplicar</button>
+        </div>
+      </div>
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
         <button onClick={()=>setSub("comision")} disabled={planesSim.length===0} style={{...btnP,opacity:planesSim.length===0?0.5:1,cursor:planesSim.length===0?"not-allowed":"pointer"}}>Continuar →</button>
@@ -614,32 +630,23 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           </table>
         </div>
       </div>
-      {/* OPCIONES CON MEJORAS */}
-      {(()=>{
-        const mejConOpc=MEJORAS_DEF.filter(m=>Object.keys((mejoras||{})[m.id]||{}).length>0);
-        return(<div style={{...card(),marginTop:"1rem"}}>
-          <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Opciones con mejoras</p>
-          <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar un mismo plan con y sin mejoras (ej. 8500_PYME y 8500_PYME con Farmacia 60%). Cada opción es un plan aparte: tiene sus propios ajustes, costo y fila en los exportes. El precio arranca igual al del plan base.</p>
-          {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
-            {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
-              {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar opción" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
-            </span>)}
-          </div>}
-          {mejConOpc.length===0
-            ?<p style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>No hay mejoras cargadas. Cargalas en "Mejoras".</p>
-            :(<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8}}>
-              <select value={nuevaVar.planId} onChange={e=>setNuevaVar(p=>({...p,planId:e.target.value}))} style={{...inp,width:160}}>
-                <option value="">Plan base…</option>
-                {allOmintPlans.map(id=><option key={id} value={id}>{id}</option>)}
-              </select>
-              {mejConOpc.map(m=>(<select key={m.id} value={nuevaVar.mejoras[m.id]||""} onChange={e=>setNuevaVar(p=>({...p,mejoras:{...p.mejoras,[m.id]:e.target.value}}))} style={{...inp,width:"auto"}}>
-                <option value="">{m.label}: no</option>
-                {Object.keys(mejoras[m.id]).map(o=><option key={o} value={o}>{m.label} {o}</option>)}
-              </select>))}
-              <button onClick={agregarVariante} disabled={!nuevaVar.planId||!MEJORAS_DEF.some(m=>nuevaVar.mejoras[m.id])} style={{...btnS,fontSize:12,opacity:!nuevaVar.planId||!MEJORAS_DEF.some(m=>nuevaVar.mejoras[m.id])?0.5:1}}>+ Agregar opción</button>
-            </div>)}
-        </div>);
-      })()}
+      {/* DUPLICAR PLAN */}
+      <div style={{...card(),marginTop:"1rem"}}>
+        <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Duplicar plan</p>
+        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: en la cotización le elegís mejoras, ajustes y el nombre que va en la propuesta.</p>
+        {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+          {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
+            {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar copia" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
+          </span>)}
+        </div>}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <select value={planADuplicar} onChange={e=>setPlanADuplicar(e.target.value)} style={{...inp,width:200}}>
+            <option value="">Elegí un plan…</option>
+            {allOmintPlans.map(id=><option key={id} value={id}>{id}</option>)}
+          </select>
+          <button onClick={()=>duplicarPlan(planADuplicar)} disabled={!planADuplicar} style={{...btnS,fontSize:12,opacity:planADuplicar?1:0.5}}>⧉ Duplicar</button>
+        </div>
+      </div>
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
         <button onClick={()=>setSub("comision")} style={btnP}>Continuar →</button>
@@ -695,7 +702,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           )}
         </div>
         <div style={{display:"flex",gap:8,paddingTop:26,flexWrap:"wrap"}}>
-          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&<button onClick={()=>{setAdjPrices({});setAdjCostos({});setChat([]);}} style={{...btnS,fontSize:12}}>↺ Resetear</button>}
+          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&<button onClick={()=>{setAdjPrices({});setAdjCostos({});setAdjPct({});setChat([]);}} style={{...btnS,fontSize:12}}>↺ Resetear</button>}
           <button onClick={()=>setShowExport(true)} style={{...btnP,background:"#374151"}}>↓ Exportar propuesta</button>
           <button onClick={()=>guardar("abierto")} style={btnS}>Guardar abierto</button>
           <button onClick={()=>guardar("cerrado")} style={btnP}>Guardar cerrado</button>
@@ -725,9 +732,9 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
           <p style={{fontSize:12,fontWeight:600,color:"#374151",fontFamily:FONT,marginRight:4}}>🎭 Escenarios:</p>
           {Object.keys(scenarios).map(name=>(
-            <button key={name} onClick={()=>{setAdjPrices(scenarios[name].adjPrices);setAdjCostos(scenarios[name].adjCostos);}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px solid ${BLUE}`,background:"#fff",color:BLUE,cursor:"pointer",fontFamily:FONT}}>{name}</button>
+            <button key={name} onClick={()=>{setAdjPrices(scenarios[name].adjPrices);setAdjCostos(scenarios[name].adjCostos);setAdjPct(scenarios[name].adjPct||{});}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px solid ${BLUE}`,background:"#fff",color:BLUE,cursor:"pointer",fontFamily:FONT}}>{name}</button>
           ))}
-          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&(<button onClick={()=>{const name=prompt("Nombre del escenario:");if(name?.trim()){const k=name.trim();if(scenarios[k]&&!confirm(`Ya existe el escenario "${k}". ¿Sobreescribir?`))return;setScenarios(p=>({...p,[k]:{adjPrices:{...adjPrices},adjCostos:{...adjCostos}}}));}}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px dashed #9CA3AF`,background:"#fff",color:"#374151",cursor:"pointer",fontFamily:FONT}}>+ Guardar escenario</button>)}
+          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&(<button onClick={()=>{const name=prompt("Nombre del escenario:");if(name?.trim()){const k=name.trim();if(scenarios[k]&&!confirm(`Ya existe el escenario "${k}". ¿Sobreescribir?`))return;setScenarios(p=>({...p,[k]:{adjPrices:{...adjPrices},adjCostos:{...adjCostos},adjPct:{...adjPct}}}));}}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px dashed #9CA3AF`,background:"#fff",color:"#374151",cursor:"pointer",fontFamily:FONT}}>+ Guardar escenario</button>)}
           {Object.keys(scenarios).length===0&&Object.keys(adjPrices).length===0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>Ajustá precios y guardá como escenario para comparar</span>}
         </div>
       </div>
@@ -832,7 +839,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:500}}>
           <thead><tr>{["Plan","Facturación","Costo","C/F","Dif. vs anterior"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
           <tbody>{simTotals.map((t,i)=>{const prev=simTotals[i-1];const dif=prev&&prev.fac>0?(t.fac/prev.fac-1)*100:null;return(<tr key={t.cotId}>
-            <td style={TD({fontWeight:700,color:BLUE})}>{t.cotId}</td>
+            <td style={TD({fontWeight:700,color:BLUE})}>{planCustomNames[t.adjKeys[0]]||t.cotId}</td>
             <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(t.fac)}</td>
             <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(t.costo)}</td>
             <td style={TD({textAlign:"right"})}><span style={{...badge(cfColor(t.cf),cfBg(t.cf)),minWidth:52,display:"inline-block",textAlign:"center"}}>{t.cf.toFixed(1)}%</span></td>
@@ -880,8 +887,8 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
               {r.bd.skipped>0&&<span style={{fontSize:11,color:"#DC2626",fontFamily:FONT,fontWeight:600}}>⚠ {r.bd.skipped} fila{r.bd.skipped>1?"s":""} sin edad válida (no incluida{r.bd.skipped>1?"s":""})</span>}
               {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
               <span style={{marginLeft:"auto",...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
-              {(adjPrices[r.adjKey]||adjCostos[r.adjKey])&&<button onClick={()=>{setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjCostos(prev=>{const n={...prev};delete n[r.adjKey];return n;});}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid #DC2626`,background:"#FEF2F2",color:"#DC2626",cursor:"pointer",fontFamily:FONT,fontWeight:500}}>↺ Restaurar</button>}
-              {hasMej&&<div style={{display:"flex",alignItems:"center",gap:6,width:"100%",marginTop:4}}>
+              {(adjPrices[r.adjKey]||adjCostos[r.adjKey])&&<button onClick={()=>{setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjCostos(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjPct(prev=>{const n={...prev};delete n[r.adjKey];return n;});}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid #DC2626`,background:"#FEF2F2",color:"#DC2626",cursor:"pointer",fontFamily:FONT,fontWeight:500}}>↺ Restaurar</button>}
+              {(hasMej||r.cotId!==r.planId)&&<div style={{display:"flex",alignItems:"center",gap:6,width:"100%",marginTop:4}}>
                 <span style={{fontSize:11,color:"#166534",fontFamily:FONT,fontWeight:600,whiteSpace:"nowrap"}}>Nombre del plan cotizado:</span>
                 <input
                   value={planCustomNames[r.adjKey]??r.cotId}
@@ -892,6 +899,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
               </div>}
             </div>);
           })()}
+          <AjustePrecios adj={adjPct[r.adjKey]} onChange={adj=>aplicarAjuste(r,adj)}/>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:660}}>
               <thead><tr>
@@ -906,7 +914,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
                   return(<tr key={row.id} style={{opacity:row.count===0?0.3:1}}>
                     <td style={TD({fontWeight:500})}>{row.label}</td>
                     <td style={TD({textAlign:"right",color:"#6B7280"})}>{row.count}</td>
-                    <td style={TD({textAlign:"right"})}><div style={{display:"flex",alignItems:"center",gap:2,justifyContent:"flex-end"}}><span style={{fontSize:11,color:hadjP?BLUE:"#6B7280",fontFamily:FONT}}>$</span><input type="number" min={0} value={row.precio} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjPrices(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={{...numInp(80,hadjP),textAlign:"right"}}/></div></td>
+                    <td style={TD({textAlign:"right"})}><div style={{display:"flex",alignItems:"center",gap:2,justifyContent:"flex-end"}}><span style={{fontSize:11,color:hadjP?BLUE:"#6B7280",fontFamily:FONT}}>$</span><input type="number" min={0} value={row.precio} onChange={e=>setPrecioManual(r,row.id,parseFloat(e.target.value)||0)} style={{...numInp(80,hadjP),textAlign:"right"}}/></div></td>
                     <td style={TD({textAlign:"right"})}><div style={{display:"flex",alignItems:"center",gap:2,justifyContent:"flex-end"}}><span style={{fontSize:11,color:hadjC?"#7C3AED":"#6B7280",fontFamily:FONT}}>$</span><input type="number" min={0} value={row.costo} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjCostos(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={{...numInp(80,hadjC),textAlign:"right"}}/></div></td>
                     <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(row.fac)}</td>
                     <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(row.cos)}</td>
