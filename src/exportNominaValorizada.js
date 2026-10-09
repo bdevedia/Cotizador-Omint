@@ -103,7 +103,7 @@ function buildSheet(items,titulo){
 }
 
 function exportNominaValorizadaXLS(results,empresa,planesNombres,fecha){
-  const nombre=r=>(planesNombres||{})[r.adjKey]||r.planId;
+  const nombre=r=>(planesNombres||{})[r.adjKey]||r.cotId;
   const itemsDe=rs=>rs.flatMap(r=>{
     const precios=Object.fromEntries(r.bd.rows.map(x=>[x.id,x.precio]));
     return r.empList.map(fam=>({fam,plan:nombre(r),precio:precioFamilia(fam,precios)}));
@@ -111,10 +111,10 @@ function exportNominaValorizadaXLS(results,empresa,planesNombres,fecha){
   const titulo=`Nómina Valorizada${empresa?` — ${empresa}`:""}`;
   const wb=XLSX.utils.book_new();
   if(results.some(r=>r.sim)){
-    const planes=[...new Set(results.map(r=>r.planId))];
+    const planes=[...new Set(results.map(r=>r.cotId))];
     const usados=new Set();
-    planes.forEach(planId=>{
-      const rs=results.filter(r=>r.planId===planId);
+    planes.forEach(cotId=>{
+      const rs=results.filter(r=>r.cotId===cotId);
       const base=`Valorizada ${nombre(rs[0])}`.replace(/[[\]:*?/\\]/g," ").slice(0,31);
       let name=base;
       for(let i=2;usados.has(name);i++)name=`${base.slice(0,26)} (${i})`;

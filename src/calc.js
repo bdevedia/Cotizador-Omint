@@ -69,7 +69,7 @@ function checkPriceInversions(results){
           const p1=r1.bd.rows.find(r=>r.id===cat.id)?.precio||0;
           const p2=r2.bd.rows.find(r=>r.id===cat.id)?.precio||0;
           if(p1>0&&p2>0&&p1>p2){
-            violations.push({zona,cat:cat.label,plan1:r1.planId,price1:p1,plan2:r2.planId,price2:p2});
+            violations.push({zona,cat:cat.label,plan1:r1.cotId||r1.planId,price1:p1,plan2:r2.cotId||r2.planId,price2:p2});
           }
         });
       }

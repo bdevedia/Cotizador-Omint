@@ -12,7 +12,7 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMapping
     fecha:new Date().toISOString().split("T")[0],
     validez:"La propuesta tiene validez por un mes desde la fecha de presentación.",
     formato:"nchoice",
-    planesNombres:Object.fromEntries(results.map(r=>[r.adjKey,(planCustomNames||{})[r.adjKey]||r.planId])),
+    planesNombres:Object.fromEntries(results.map(r=>[r.adjKey,(planCustomNames||{})[r.adjKey]||r.cotId])),
     textoExtra:"",
     masaSalarial:"",
   });
@@ -65,9 +65,9 @@ function ExportModal({results,empresa,empsRef,onClose,brokerPct,osde,planMapping
             {results.map(r=>(
               <div key={r.adjKey} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
                 <span style={{...badge(ZONA_COLORS[r.zona]?.c||BLUE,ZONA_COLORS[r.zona]?.bg||BLUE_LT),fontSize:11,minWidth:64}}>{r.zona}</span>
-                <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT,minWidth:90}}>{r.planId}</span>
+                <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT,minWidth:90}}>{r.cotId}</span>
                 <span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>→</span>
-                <input value={cfg.planesNombres[r.adjKey]||r.planId} onChange={e=>setCfg(p=>({...p,planesNombres:{...p.planesNombres,[r.adjKey]:e.target.value}}))} style={{...inp,flex:1,padding:"6px 10px",fontSize:13}}/>
+                <input value={cfg.planesNombres[r.adjKey]||r.cotId} onChange={e=>setCfg(p=>({...p,planesNombres:{...p.planesNombres,[r.adjKey]:e.target.value}}))} style={{...inp,flex:1,padding:"6px 10px",fontSize:13}}/>
               </div>
             ))}
           </div>
