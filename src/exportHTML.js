@@ -32,7 +32,7 @@ function precio(r,id){return r.bd.rows.find(x=>x.id===id)?.precio||0;}
 // del plan (sumando todas sus zonas). Sin socios en esos rangos, promedio simple.
 function capitado054(r,results){
   const ids=["s0_25","s26_34","s35_54"];
-  const counts=ids.map(id=>results.filter(x=>x.planId===r.planId)
+  const counts=ids.map(id=>results.filter(x=>x.cotId===r.cotId)
     .reduce((a,x)=>a+(x.bd.rows.find(y=>y.id===id)?.count||0),0));
   const tot=counts.reduce((a,b)=>a+b,0);
   if(tot===0)return ids.reduce((a,id)=>a+precio(r,id),0)/ids.length;
@@ -43,10 +43,10 @@ function generateProposalHTML(cfg,results){
   const {empresa,fecha,validez,formato,planesNombres,textoExtra}=cfg;
   const capitados=formato==="capitados";
 
-  // Deduplicar por plan Omint (planId) — igual que Excel: precios únicos por plan cotizado
+  // Deduplicar por plan cotizado (cotId) — igual que Excel: precios únicos por plan cotizado
   const seen=new Set();
-  const planes=results.filter(r=>{if(seen.has(r.planId))return false;seen.add(r.planId);return true;});
-  const nombre=r=>(planesNombres||{})[r.adjKey]||r.planId;
+  const planes=results.filter(r=>{if(seen.has(r.cotId))return false;seen.add(r.cotId);return true;});
+  const nombre=r=>(planesNombres||{})[r.adjKey]||r.cotId;
 
   let tabla;
   if(capitados){
