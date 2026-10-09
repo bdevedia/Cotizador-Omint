@@ -7,7 +7,8 @@ const TD=(x={})=>({padding:"8px 11px",borderBottom:`1px solid ${BORDER}`,fontSiz
 const badge=(c,bg)=>({display:"inline-block",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,color:c,background:bg,fontFamily:FONT});
 const btnP={background:BLUE,color:"#fff",border:"none",borderRadius:8,padding:"9px 18px",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:FONT};
 const btnS={background:"#fff",color:BLUE,border:`1px solid ${BORDER}`,borderRadius:8,padding:"9px 18px",fontWeight:500,fontSize:13,cursor:"pointer",fontFamily:FONT};
-const inp={border:`1px solid ${BORDER}`,borderRadius:8,padding:"8px 12px",fontSize:13,width:"100%",outline:"none",fontFamily:FONT};
-const numInp=(w=90,adj=false)=>({width:w,textAlign:"right",fontSize:12,padding:"3px 6px",border:`1px solid ${adj?BLUE:BORDER}`,borderRadius:6,fontFamily:FONT,color:adj?BLUE:"#111827"});
+// Campos: fondo y texto explícitos para que se lean aunque el sistema esté en modo oscuro
+const inp={border:`1px solid ${BORDER}`,borderRadius:8,padding:"8px 12px",fontSize:13,width:"100%",outline:"none",fontFamily:FONT,background:"#fff",color:"#111827",colorScheme:"light"};
+const numInp=(w=90,adj=false)=>({width:w,textAlign:"right",fontSize:12,padding:"3px 6px",border:`1px solid ${adj?BLUE:BORDER}`,borderRadius:6,fontFamily:FONT,color:adj?BLUE:"#111827",background:"#fff",colorScheme:"light"});
 
 export { card, TH, TD, badge, btnP, btnS, inp, numInp };

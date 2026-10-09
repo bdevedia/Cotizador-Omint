@@ -19,7 +19,7 @@ function PctInput({value,onCommit,label}){
     <span style={{display:"flex",alignItems:"center",gap:3}}>
       <input value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
         placeholder="0" inputMode="decimal"
-        style={{width:58,textAlign:"right",fontSize:12,padding:"4px 6px",border:`1px solid ${value?BLUE:BORDER}`,borderRadius:6,fontFamily:FONT,color:value?BLUE:"#111827"}}/>
+        style={{width:58,textAlign:"right",fontSize:12,padding:"4px 6px",border:`1px solid ${value?BLUE:BORDER}`,borderRadius:6,fontFamily:FONT,color:value?BLUE:"#111827",background:"#fff",colorScheme:"light"}}/>
       <span style={{fontSize:12,color:"#6B7280"}}>%</span>
     </span>
   </label>);
