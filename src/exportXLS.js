@@ -3,7 +3,10 @@ import { CATS, CAT_IDS, ZONA_IDS, MEJORAS_DEF } from "./constants";
 import { calcOsdeFromEmps, pctAjuste } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
-function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap,planesNombres,adjPct){
+// Hojas: "Cotización" (todos los planes, un bloque por zona), "Nómina", "Lista de Costos" y
+// "Lista de Precios". Los precios y costos de la cotización toman por fórmula los de las listas.
+// listas: {precios:{zona:{plan:{cat}}}, costos:{plan:{cat}}} — las mismas que usa la cotización.
+function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap,planesNombres,adjPct,listas){
   // Mostrar plan Omint como label principal; si tiene nombre custom, usar ese
   const planLabel=res=>(planesNombres||{})[res.adjKey]||res.cotId;
   const today=new Date().toLocaleDateString("es-AR");
@@ -49,45 +52,99 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
   const zonas=[...new Set(results.map(r=>r.zona))];
   const wb=XLSX.utils.book_new();
 
-  // Equivalencias: una hoja por zona con todos sus planes.
-  // Simulación: una hoja por plan simulado y zona, porque cada plan cotiza toda la nómina
-  // y sumar planes en la misma hoja duplicaría la distribución.
-  const usedNames=new Set();
-  function sheetName(base){
-    const clean=base.replace(/[[\]:*?/\\]/g," ").trim().slice(0,31)||"Hoja";
-    let name=clean,i=2;
-    while(usedNames.has(name)){const suf=` (${i++})`;name=clean.slice(0,31-suf.length)+suf;}
-    usedNames.add(name);
-    return name;
+  const isSim=results.some(r=>r.sim);
+  const LISTA_PRECIOS="Lista de Precios",LISTA_COSTOS="Lista de Costos";
+  const CAT_COL={s0_25:1,s26_34:2,s35_54:3,s55_59:4,s60plus:5,h1:7,h2plus:8};
+  const CAT_HDR=[["s0_25","00 - 25"],["s26_34","26 - 35"],["s35_54","36 - 54"],["s55_59","55 - 59"],["s60plus","60 +"],["h1","Hijo 1"],["h2plus","Hijo 2 o +"]];
+  // Referencia a una celda de otra hoja: 'Lista de Precios'!B5
+  const xref=(hoja,c,r)=>`'${hoja}'!${XLSX.utils.encode_cell({c,r})}`;
+
+  // Hoja de lista simple: título, encabezado de categorías y una fila por plan. Devuelve {ws, pos}
+  // con pos[clave][plan] = fila, para que la cotización la referencie.
+  function hojaLista(titulo,bloques){
+    const w={},mg=[];let r=0;const pos={};
+    const put=(c,rr,v,font,fill,align,border,nf)=>{w[XLSX.utils.encode_cell({c,r:rr})]=sc(v,font,fill,align,border,nf);};
+    put(0,r,titulo,fWHITE,FILL_DARK_HEADER,aL,BORDER_ALL);mg.push({s:{c:0,r},e:{c:8,r}});r+=2;
+    bloques.forEach(({clave,subtitulo,filas,nf})=>{
+      if(!filas.length)return;
+      if(subtitulo){put(0,r,subtitulo,fBOLD,FILL_LIGHTBLUE,aL,BORDER_ALL);r++;}
+      put(1,r,"Adulto / Cónyuge / FAC / Hijo mayor 25",fCAT,null,aL,BORDER_BOT);mg.push({s:{c:1,r},e:{c:5,r}});
+      put(7,r,"Hijo menor 25",fCAT,null,aL,BORDER_BOT);mg.push({s:{c:7,r},e:{c:8,r}});r++;
+      put(0,r,"Plan",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
+      CAT_HDR.forEach(([id,h])=>put(CAT_COL[id],r,h,fBOLD,null,aC,BORDER_ALL));r++;
+      pos[clave]={};
+      filas.forEach(([nombre,valores])=>{
+        pos[clave][nombre]=r;
+        put(0,r,nombre,fBOLD,FILL_GRAY,aL,BORDER_ALL);
+        CAT_HDR.forEach(([id])=>put(CAT_COL[id],r,+(+(valores?.[id]||0)).toFixed(2),fNorm,null,aC,BORDER_ALL,nf||NF_MONEY));
+        r++;
+      });
+      r++;
+    });
+    w["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:8,r}});
+    w["!merges"]=mg;
+    w["!cols"]=[{wch:24},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:3},{wch:12},{wch:12}];
+    return{ws:w,pos,r};
   }
-  const hojas=results.some(r=>r.sim)
-    ?results.map(r=>({zona:r.zona,zResults:[r],nombre:zonas.length>1?`Sim. ${planLabel(r)} ${r.zona}`:`Sim. ${planLabel(r)}`}))
-    :zonas.map(zona=>({zona,zResults:results.filter(r=>r.zona===zona),nombre:zonas.length>1?`Cot. ${zona}`:"Cotización"}));
+  const preciosLista=(listas||{}).precios||{};
+  const costosLista=(listas||{}).costos||{};
+  const ordenPlanes=obj=>Object.keys(obj||{}).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  const lp=hojaLista(`Lista de Precios - ${mesAno}`,
+    [...new Set([...ZONA_IDS,...Object.keys(preciosLista)])].filter(z=>preciosLista[z]).map(z=>({
+      clave:z,subtitulo:`Zona ${z}`,filas:ordenPlanes(preciosLista[z]).map(pl=>[pl,preciosLista[z][pl]]),
+    })));
+  const lc=hojaLista(`Lista de Costos - ${mesAno}`,[{clave:"costos",filas:ordenPlanes(costosLista).map(pl=>[pl,costosLista[pl]])}]);
+  // Mejoras al pie de la lista de costos (por categoría o PMPM)
+  {
+    let r=lc.r;
+    const put=(c,rr,v,font,fill,align,border,nf)=>{lc.ws[XLSX.utils.encode_cell({c,r:rr})]=sc(v,font,fill,align,border,nf);};
+    (MEJORAS_DEF||[]).forEach(m=>{
+      const opts=Object.entries((mejoras||{})[m.id]||{});
+      if(!opts.length)return;
+      put(0,r,`Mejora: ${m.label}`,fBOLD,FILL_GREEN,aL,BORDER_ALL);r++;
+      if(m.type==="pmpm"){
+        opts.forEach(([o,v])=>{put(0,r,o,fNorm,FILL_GRAY,aL,BORDER_ALL);put(1,r,+(+(v||0)).toFixed(2),fNorm,null,aC,BORDER_ALL,NF_MONEY);r++;});
+      }else{
+        CAT_HDR.forEach(([id,h])=>put(CAT_COL[id],r,h,fBOLD,null,aC,BORDER_ALL));r++;
+        opts.forEach(([o,v])=>{put(0,r,o,fNorm,FILL_GRAY,aL,BORDER_ALL);
+          CAT_HDR.forEach(([id])=>put(CAT_COL[id],r,+(+(v?.[id]||0)).toFixed(2),fNorm,null,aC,BORDER_ALL,NF_MONEY));r++;});
+      }
+      r++;
+    });
+    lc.ws["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:8,r}});
+  }
 
-  hojas.forEach(({zona,zResults,nombre})=>{
-    const ws={};
-    const merges=[];
-    let row=0;
+  // ── Hoja Cotización: todos los planes, un bloque por zona ─────────────────
+  const ws={};
+  const merges=[];
+  let row=0;
 
-    function p(col,r,v,font,fill,align,border,nf){
-      ws[XLSX.utils.encode_cell({c:col,r})]= sc(v,font,fill,align,border,nf);
-    }
-    function pF(col,r,formula,v,font,fill,align,border,nf){
-      const cell=sc(v??0,font,fill,align,border,nf);
-      cell.f=formula; cell.t="n";
-      ws[XLSX.utils.encode_cell({c:col,r})]=cell;
-    }
-    const ea=(c,r)=>XLSX.utils.encode_cell({c,r});
-    function merge(c1,r1,c2,r2){merges.push({s:{c:c1,r:r1},e:{c:c2,r:r2}});}
+  function p(col,r,v,font,fill,align,border,nf){
+    ws[XLSX.utils.encode_cell({c:col,r})]= sc(v,font,fill,align,border,nf);
+  }
+  function pF(col,r,formula,v,font,fill,align,border,nf){
+    const cell=sc(v??0,font,fill,align,border,nf);
+    cell.f=formula; cell.t="n";
+    ws[XLSX.utils.encode_cell({c:col,r})]=cell;
+  }
+  const ea=(c,r)=>XLSX.utils.encode_cell({c,r});
+  function merge(c1,r1,c2,r2){merges.push({s:{c:c1,r:r1},e:{c:c2,r:r2}});}
+
+  zonas.forEach((zona,zi)=>{
+    const zResults=results.filter(r=>r.zona===zona);
+    if(zi>0)row+=2; // separación entre zonas
 
     // Col layout: A=0, B=1(s0_25), C=2(s26_34), D=3(s35_54), E=4(s55_59), F=5(s60plus), G=6(gap), H=7(h1), I=8(h2plus)
     // J=9, K=10, L=11
     const CAT_KEYS=["s0_25","s26_34","s35_54","s55_59","s60plus",null,"h1","h2plus"];
     const CAT_COLS=[1,2,3,4,5,null,7,8];
 
+    // Filas de distribución: una por plan vigente; en simulación todos los planes cotizan
+    // la misma nómina, así que va una sola fila
+    const distRows=isSim?zResults.slice(0,1):zResults;
     // Distribution totals across ALL plans
     const distTot={s0_25:0,s26_34:0,s35_54:0,s55_59:0,s60plus:0,h1:0,h2plus:0};
-    zResults.forEach(res=>{
+    distRows.forEach(res=>{
       CAT_KEYS.filter(Boolean).forEach(k=>{
         const r=res.bd.rows.find(x=>x.id===k);
         distTot[k]+=(r?.count||0);
@@ -111,8 +168,8 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     row++;
 
     const distPlanFirstRow=row;
-    zResults.forEach(res=>{
-      p(0,row,res.planVigente||res.cotId,fBOLD,FILL_GRAY,aC,BORDER_ALL);
+    distRows.forEach(res=>{
+      p(0,row,isSim?"Nómina":res.planVigente||res.cotId,fBOLD,FILL_GRAY,aC,BORDER_ALL);
       let planTot=0;
       CAT_KEYS.forEach((k,ci)=>{
         if(k==null)return;
@@ -196,8 +253,6 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     uniqueOmint.forEach((res,pi)=>{adjRowMap[res.cotId]=row+2*M+5+pi;});
     const dP=distPctRowIdx;
     const rP=rango059PctRowIdx;
-    // Columnas de categoría en la hoja: B-F adultos, H-I hijos
-    const CAT_COL={s0_25:1,s26_34:2,s35_54:3,s55_59:4,s60plus:5,h1:7,h2plus:8};
 
     // ── Filas de precios (una por plan cotizado): precio base × (1 + ajuste del rango) ──
     uniqueOmint.forEach((res,pi)=>{
@@ -205,10 +260,13 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const getP=id=>(res.basePreciosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.precio??0;
       const adjCat=adjCatRowMap[res.cotId];
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
+      const filaLista=lp.pos[res.zona]?.[res.planId];
       Object.entries(CAT_COL).forEach(([id,ci])=>{
         const v=+getP(id).toFixed(0);
         const pct=pctAjuste((adjPct||{})[res.adjKey],id);
-        pF(ci,row,`${v}*(1+${ea(ci,adjCat)})`,Math.round(v*(1+pct)),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+        // Precio de lista: referencia a la hoja Lista de Precios (si el plan está), si no el valor
+        const base=filaLista!=null?xref(LISTA_PRECIOS,ci,filaLista):v;
+        pF(ci,row,`${base}*(1+${ea(ci,adjCat)})`,Math.round(getP(id)*(1+pct)),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       });
       row++;
     });
@@ -335,9 +393,14 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       costoEERowMap[res.cotId]=row;
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
-      [getC("s0_25"),getC("s26_34"),getC("s35_54"),getC("s55_59"),getC("s60plus")].forEach((v,i)=>p(i+1,row,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY));
-      p(7,row,+getC("h1").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
-      p(8,row,+getC("h2plus").toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      const filaCosto=lc.pos.costos?.[res.planId];
+      Object.entries(CAT_COL).forEach(([id,ci])=>{
+        const v=getC(id);
+        // Costo de lista → referencia a la hoja Lista de Costos; costo editado a mano → valor
+        const deLista=filaCosto!=null&&Math.abs(v-(costosLista[res.planId]?.[id]||0))<0.005;
+        if(deLista)pF(ci,row,`+${xref(LISTA_COSTOS,ci,filaCosto)}`,+v.toFixed(2),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+        else p(ci,row,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
+      });
       const costo059=tot059>0?["s0_25","s26_34","s35_54","s55_59","h1","h2plus"].reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/tot059:0;
       const costo60=getC("s60plus");
       const costoGen=grandTotal>0?CAT_KEYS.filter(Boolean).reduce((a,k)=>a+(distTot[k]||0)*(getC(k)||0),0)/grandTotal:0;
@@ -509,7 +572,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
       // Fact. Omint = SUMPRODUCT(precios ya ajustados × conteos del plan)
       const bpr=basePriceRowMap[res.cotId];
-      const pd=distPlanFirstRow+pi; // fila de distribución de este plan (por plan vigente)
+      const pd=isSim?distPlanFirstRow:distPlanFirstRow+pi; // fila de distribución de este plan (por plan vigente)
       const factFallback=+res.bd.totalFac.toFixed(2);
       pF(CC.omintFac,row,
         `${ea(1,bpr)}*${ea(1,pd)}+${ea(2,bpr)}*${ea(2,pd)}+${ea(3,bpr)}*${ea(3,pd)}+${ea(4,bpr)}*${ea(4,pd)}+${ea(5,bpr)}*${ea(5,pd)}+${ea(7,bpr)}*${ea(7,pd)}+${ea(8,bpr)}*${ea(8,pd)}`,
@@ -540,6 +603,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
     const cotTotalRowIdx=row;
     const cotPlanLastRow=row-1;
+    if(!isSim){
     const totalOsde=totalOsdeAllPlans;
     const vsOsdeTotal=totalOsde>0&&totalFac>0?totalFac/totalOsde-1:null;
     p(CC.plan,row,"Total",fWHITE,FILL_NAVY,aC,BORDER_ALL);
@@ -558,6 +622,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     pF(CC.costo,row,`SUM(${ea(CC.costo,cotPlanFirstRow)}:${ea(CC.costo,cotPlanLastRow)})`,+totalCosto.toFixed(2),fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
     pF(CC.cf,row,`IF(${ea(CC.omintFac,cotTotalRowIdx)}=0,0,${ea(CC.costo,cotTotalRowIdx)}/${ea(CC.omintFac,cotTotalRowIdx)})`,totalFac>0?+(totalCosto/totalFac).toFixed(4):0,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
     row++;
+    }
 
     // Masa salarial / aporte
     const masaSal=parseFloat(masaSalarial)||0;
@@ -572,10 +637,19 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       p(0,row,"Aporte (9% × 85% × 13/12):",fBOLD,null,aL,BORDER_ALL);
       pF(1,row,`${ea(1,masaSalRowIdx)}*0.09*0.85*(13/12)`,+aporte.toFixed(2),fNorm,null,aC,BORDER_ALL,NF_MONEY2);
       row++;
-      const saldo=totalFac-aporte;
-      p(0,row,"Saldo a pagar:",fBOLD,null,aL,BORDER_ALL);
-      pF(1,row,`${ea(CC.omintFac,cotTotalRowIdx)}-${ea(1,aporteRowIdx)}`,+saldo.toFixed(2),fRED,null,aC,BORDER_ALL,NF_MONEY2);
-      row++;
+      if(isSim){
+        // Simulación: saldo por plan
+        zResults.forEach((res,pi)=>{
+          p(0,row,`Saldo a pagar ${planLabel(res)}:`,fBOLD,null,aL,BORDER_ALL);
+          pF(1,row,`${ea(CC.omintFac,cotPlanRowIdxs[pi])}-${ea(1,aporteRowIdx)}`,+(res.bd.totalFac-aporte).toFixed(2),fRED,null,aC,BORDER_ALL,NF_MONEY2);
+          row++;
+        });
+      }else{
+        const saldo=totalFac-aporte;
+        p(0,row,"Saldo a pagar:",fBOLD,null,aL,BORDER_ALL);
+        pF(1,row,`${ea(CC.omintFac,cotTotalRowIdx)}-${ea(1,aporteRowIdx)}`,+saldo.toFixed(2),fRED,null,aC,BORDER_ALL,NF_MONEY2);
+        row++;
+      }
     }
 
     row++;
@@ -614,13 +688,15 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       row++;
     });
 
-    ws["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:11,r:row}});
-    ws["!merges"]=merges;
-    ws["!cols"]=[
-      {wch:20},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:3},{wch:11},{wch:11},{wch:14},{wch:12},{wch:14}
-    ];
-    XLSX.utils.book_append_sheet(wb,ws,sheetName(nombre));
+    row++;
   });
+
+  ws["!ref"]=XLSX.utils.encode_range({s:{c:0,r:0},e:{c:11,r:row}});
+  ws["!merges"]=merges;
+  ws["!cols"]=[
+    {wch:20},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:3},{wch:11},{wch:11},{wch:14},{wch:12},{wch:14}
+  ];
+  XLSX.utils.book_append_sheet(wb,ws,"Cotización");
 
   // Hoja Nómina
   if(emps&&emps.length>0){
@@ -636,6 +712,8 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     wsNom["!cols"]=Array(10).fill({wch:14});
     XLSX.utils.book_append_sheet(wb,wsNom,"Nómina");
   }
+  XLSX.utils.book_append_sheet(wb,lc.ws,LISTA_COSTOS);
+  XLSX.utils.book_append_sheet(wb,lp.ws,LISTA_PRECIOS);
 
   XLSX.writeFile(wb,`Cotizacion_${empresa||"empresa"}_${today.replace(/\//g,"-")}.xlsx`);
 }
