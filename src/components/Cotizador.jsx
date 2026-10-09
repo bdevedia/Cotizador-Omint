@@ -878,7 +878,6 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
         return(<div key={r.osdeKey} style={{...card(),marginBottom:"1.5rem"}}>
           {(()=>{
-            const hasMej=MEJORAS_DEF.some(m=>r.mejSel[m.id]);
             return(<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
               <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
               <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.cotId}</span>
@@ -888,15 +887,16 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
               {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
               <span style={{marginLeft:"auto",...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
               {(adjPrices[r.adjKey]||adjCostos[r.adjKey])&&<button onClick={()=>{setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjCostos(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjPct(prev=>{const n={...prev};delete n[r.adjKey];return n;});}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid #DC2626`,background:"#FEF2F2",color:"#DC2626",cursor:"pointer",fontFamily:FONT,fontWeight:500}}>↺ Restaurar</button>}
-              {(hasMej||r.cotId!==r.planId)&&<div style={{display:"flex",alignItems:"center",gap:6,width:"100%",marginTop:4}}>
-                <span style={{fontSize:11,color:"#166534",fontFamily:FONT,fontWeight:600,whiteSpace:"nowrap"}}>Nombre del plan cotizado:</span>
+              {/* Nombre del plan en la propuesta (PDF, Excel y nómina valorizada): siempre editable */}
+              <div style={{display:"flex",alignItems:"center",gap:6,width:"100%",marginTop:4}}>
+                <span style={{fontSize:11,color:BLUE,fontFamily:FONT,fontWeight:600,whiteSpace:"nowrap"}}>Nombre del plan cotizado:</span>
                 <input
                   value={planCustomNames[r.adjKey]??r.cotId}
                   onChange={e=>setPlanCustomNames(prev=>({...prev,[r.adjKey]:e.target.value}))}
                   placeholder={r.cotId}
-                  style={{flex:1,fontSize:12,padding:"4px 8px",border:"1.5px solid #BBF7D0",borderRadius:6,fontFamily:FONT,background:"#F0FDF4",color:"#166534",outline:"none",maxWidth:320}}
+                  style={{flex:1,fontSize:12,padding:"4px 8px",border:`1.5px solid ${BORDER}`,borderRadius:6,fontFamily:FONT,background:"#fff",color:BLUE,colorScheme:"light",outline:"none",maxWidth:320}}
                 />
-              </div>}
+              </div>
             </div>);
           })()}
           <AjustePrecios adj={adjPct[r.adjKey]} onChange={adj=>aplicarAjuste(r,adj)}/>
