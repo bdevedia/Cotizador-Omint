@@ -552,6 +552,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     const totalFac=zResults.reduce((a,r)=>a+r.bd.totalFac,0);
     const totalCosto=zResults.reduce((a,r)=>a+r.bd.totalCosto,0);
     let totalOsdeAllPlans=0;
+    let facConOsde=0; // facturación Omint solo de los planes que tienen OSDE para comparar
 
     const cotPlanFirstRow=row;
     const cotPlanRowIdxs=[];
@@ -562,6 +563,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       const osdeResult=mappedOsde&&osde?.[mappedOsde]?calcOsdeFromEmps(res.empList,osde[mappedOsde]):null;
       const osdeFac=osdeResult?osdeResult.total:0;
       totalOsdeAllPlans+=osdeFac;
+      if(osdeFac>0)facConOsde+=res.bd.totalFac;
       const vsOsde=osdeFac>0&&res.bd.totalFac>0?res.bd.totalFac/osdeFac-1:null;
 
       p(CC.plan,row,res.planVigente||res.cotId,fBOLD,FILL_GRAY,aC,BORDER_ALL); // plan vigente
@@ -605,7 +607,8 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     const cotPlanLastRow=row-1;
     if(!isSim){
     const totalOsde=totalOsdeAllPlans;
-    const vsOsdeTotal=totalOsde>0&&totalFac>0?totalFac/totalOsde-1:null;
+    // VS OSDE del total: solo los planes con OSDE, así no suma facturación sin contraparte
+    const vsOsdeTotal=totalOsde>0&&facConOsde>0?facConOsde/totalOsde-1:null;
     p(CC.plan,row,"Total",fWHITE,FILL_NAVY,aC,BORDER_ALL);
     if(hasOsde){
       pF(CC.osdeFac,row,`SUM(${ea(CC.osdeFac,cotPlanFirstRow)}:${ea(CC.osdeFac,cotPlanLastRow)})`,totalOsde>0?+totalOsde.toFixed(2):null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
@@ -614,7 +617,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     pF(CC.omintFac,row,`SUM(${ea(CC.omintFac,cotPlanFirstRow)}:${ea(CC.omintFac,cotPlanLastRow)})`,+totalFac.toFixed(2),fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_MONEY2);
     if(hasOsde){
       if(totalOsde>0){
-        pF(CC.vsOsde,row,`${ea(CC.omintFac,cotTotalRowIdx)}/${ea(CC.osdeFac,cotTotalRowIdx)}-1`,vsOsdeTotal!==null?+vsOsdeTotal.toFixed(4):null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
+        pF(CC.vsOsde,row,`SUMIF(${ea(CC.osdeFac,cotPlanFirstRow)}:${ea(CC.osdeFac,cotPlanLastRow)},">0",${ea(CC.omintFac,cotPlanFirstRow)}:${ea(CC.omintFac,cotPlanLastRow)})/${ea(CC.osdeFac,cotTotalRowIdx)}-1`,vsOsdeTotal!==null?+vsOsdeTotal.toFixed(4):null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
       } else {
         p(CC.vsOsde,row,null,fWHITE,FILL_NAVY,aC,BORDER_ALL,NF_PCT1);
       }
