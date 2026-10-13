@@ -9,6 +9,7 @@ import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
 import { calcBD, pctAjuste, checkPriceInversions } from "../calc";
 import Salidas from "./Salidas";
+import NominaResumen from "./NominaResumen";
 import Planilla from "./Planilla";
 
 // ── MODAL TITULARES DUPLICADOS ────────────────────────────────────────────────
@@ -470,7 +471,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     </div>
 
     {/* STEP 1 */}
-    {sub===1&&(<div>
+    {sub===1&&(<div style={{textAlign:"left"}}>
       <div style={{...card(),marginBottom:"1.5rem",padding:"14px 16px"}}>
         <p style={{fontSize:11,fontWeight:600,color:"#374151",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Tipo de propuesta</p>
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
@@ -555,6 +556,8 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         <p style={{fontWeight:600,marginBottom:4}}><span style={{fontSize:16,marginRight:6}}>⚠️</span>Se encontraron {spouseWarning.count} grupos familiares con más de 1 cónyuge. Se tomó el primero en cada caso.</p>
         <p style={{fontSize:12}}>Familias afectadas: {spouseWarning.familias.join(", ")}</p>
       </div>)}
+
+      {emps&&map.titAge&&map.ku&&<NominaResumen emps={emps} map={map} getEmpZona={getEmpZona} isSim={isSim}/>}
 
       {emps&&map.titAge&&map.ku&&(<button onClick={()=>pasoPlanes?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>{isSim?"Continuar: elegir planes →":needsMapeo?"Continuar: mapear planes →":"Continuar →"}</button>)}
     </div>)}
