@@ -4,12 +4,12 @@ import { FONT, BLUE, BLUE_LT, BORDER, GRAY,
   CATS, CAT_IDS, EMPTY_CATS,
   ZONA_IDS, ZONA_COLORS,
   OSDE_CATS, EMPTY_OSDE, MEJORAS_DEF } from "../constants";
-import { cfColor, cfBg, cfLabel, fmt, planTier } from "../utils";
-import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
+import { fmt, planTier } from "../utils";
+import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
-import { calcBD, pctAjuste, calcOsdeFromEmps, checkPriceInversions } from "../calc";
+import { calcBD, pctAjuste, checkPriceInversions } from "../calc";
 import ExportModal from "./ExportModal";
-import AjustePrecios from "./AjustePrecios";
+import Planilla from "./Planilla";
 
 // ── MODAL TITULARES DUPLICADOS ────────────────────────────────────────────────
 function DuplicadosModal({items,onResolve}){
@@ -102,7 +102,6 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const [adjCostos,setAdjCostos]=useState({});
   const [adjPct,setAdjPct]=useState({}); // {adjKey: ajuste} — ver pctAjuste en calc.js; lo usa el Excel
   const [empresa,setEmpresa]=useState("");
-  const [showSug,setShowSug]=useState(false);
   const [showExport,setShowExport]=useState(false);
   const [chat,setChat]=useState([]);
   const [chatIn,setChatIn]=useState("");
@@ -114,7 +113,6 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const [spouseWarning,setSpouseWarning]=useState(null); // advertencia cónyuges múltiples
   const [dupWarning,setDupWarning]=useState(null); // {items, rawRows, rawCols} — titulares duplicados
   const [brokerPct,setBrokerPct]=useState(""); // comisión del broker (%)
-  const [compareOsde,setCompareOsde]=useState(false);
   const [planMappingOsde,setPlanMappingOsde]=useState({});
   const [planMejoras,setPlanMejoras]=useState({});
   const [planCustomNames,setPlanCustomNames]=useState({});
@@ -671,338 +669,23 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       </div>
     </div>)}
 
-    {/* STEP 3: COTIZACIÓN */}
-    {sub===3&&(<div>
-      {isSim&&(<div style={{background:BLUE_LT,border:`1px solid ${BORDER}`,borderRadius:10,padding:"12px 16px",marginBottom:"1.25rem",fontSize:13,color:BLUE,fontFamily:FONT}}>
-        <strong>Simulación:</strong> cada plan cotiza toda la nómina ({emps?.length||0} familias).{multiSim&&" Los planes son alternativas: sus totales no se suman."}
-        {results.some(r=>r.sinPrecios)&&<p style={{marginTop:6,color:"#DC2626",fontWeight:600}}>⚠ Sin precios cargados para: {results.filter(r=>r.sinPrecios).map(r=>`${r.cotId} en ${r.zona}`).join(", ")}. Esa facturación queda en $0.</p>}
-      </div>)}
-      {/* ALERTA INVERSIÓN DE PRECIOS */}
-      {inversions.length>0&&(
-        <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:"14px 18px",marginBottom:"1.25rem"}}>
-          <p style={{fontSize:13,fontWeight:700,color:"#DC2626",marginBottom:8,fontFamily:FONT}}>⚠️ Problema de precios detectado</p>
-          <p style={{fontSize:12,color:"#991B1B",marginBottom:8,fontFamily:FONT}}>Los siguientes precios están invertidos: un plan de mayor categoría tiene precio menor que uno de categoría inferior.</p>
-          {inversions.map((v,i)=>(
-            <p key={i} style={{fontSize:12,color:"#7F1D1D",fontFamily:FONT,marginBottom:4}}>
-              • <strong>{v.zona}</strong> · {v.cat}: <strong>{v.plan1}</strong> (${fmt(v.price1)}) &gt; <strong>{v.plan2}</strong> (${fmt(v.price2)}) — el plan {v.plan2} debería ser más caro que {v.plan1}.
-            </p>
-          ))}
-        </div>
-      )}
-
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:"1.25rem",flexWrap:"wrap"}}>
-        <div style={{flex:"1 1 200px",minWidth:160,position:"relative"}}>
-          <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Empresa</label>
-          <input value={empresa} onChange={e=>{setEmpresa(e.target.value);setShowSug(true);}} onBlur={()=>setTimeout(()=>setShowSug(false),150)} onFocus={()=>setShowSug(true)} placeholder="Nombre de la empresa" style={inp}/>
-          {showSug&&knownEmpresas.filter(e=>e.toLowerCase().includes(empresa.toLowerCase())&&e.toLowerCase()!==empresa.toLowerCase()).length>0&&(
-            <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:10,background:"#fff",border:`1px solid ${BORDER}`,borderRadius:"0 0 8px 8px",boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
-              {knownEmpresas.filter(e=>e.toLowerCase().includes(empresa.toLowerCase())&&e.toLowerCase()!==empresa.toLowerCase()).map(s=><button key={s} onClick={()=>{setEmpresa(s);setShowSug(false);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:"#fff",cursor:"pointer",fontSize:13,fontFamily:FONT}}>📁 {s}</button>)}
-            </div>
-          )}
-        </div>
-        <div style={{display:"flex",gap:8,paddingTop:26,flexWrap:"wrap"}}>
-          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&<button onClick={()=>{setAdjPrices({});setAdjCostos({});setAdjPct({});setChat([]);}} style={{...btnS,fontSize:12}}>↺ Resetear</button>}
-          <button onClick={()=>setShowExport(true)} style={{...btnP,background:"#374151"}}>↓ Exportar propuesta</button>
-          <button onClick={()=>guardar("abierto")} style={btnS}>Guardar abierto</button>
-          <button onClick={()=>guardar("cerrado")} style={btnP}>Guardar cerrado</button>
-        </div>
-      </div>
-      {saveMsg&&<div style={{padding:"10px 16px",background:"#D1FAE5",borderRadius:8,fontSize:13,color:"#065F46",fontWeight:600,marginBottom:"1rem",fontFamily:FONT}}>{saveMsg}</div>}
-
-      {/* AI LOG PANEL */}
-      {aiLog.length>0&&(<div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-          <p style={{fontSize:12,fontWeight:600,color:"#374151",fontFamily:FONT}}>📋 Historial de ajustes IA ({aiLog.length})</p>
-          <button onClick={()=>setAiLog([])} style={{fontSize:11,color:"#9CA3AF",background:"none",border:"none",cursor:"pointer",fontFamily:FONT}}>Limpiar</button>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:160,overflowY:"auto"}}>
-          {[...aiLog].reverse().map((e,i)=>(
-            <div key={i} style={{fontSize:11,padding:"6px 10px",background:GRAY,borderRadius:6,fontFamily:FONT}}>
-              <span style={{color:"#9CA3AF",marginRight:8}}>{e.ts}</span>
-              <span style={{color:BLUE,fontWeight:600}}>{e.planes}</span>
-              <span style={{color:"#374151",marginLeft:6}}>← "{e.pedido}"</span>
-            </div>
-          ))}
-        </div>
-      </div>)}
-
-      {/* ESCENARIOS */}
-      <div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <p style={{fontSize:12,fontWeight:600,color:"#374151",fontFamily:FONT,marginRight:4}}>🎭 Escenarios:</p>
-          {Object.keys(scenarios).map(name=>(
-            <button key={name} onClick={()=>{setAdjPrices(scenarios[name].adjPrices);setAdjCostos(scenarios[name].adjCostos);setAdjPct(scenarios[name].adjPct||{});}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px solid ${BLUE}`,background:"#fff",color:BLUE,cursor:"pointer",fontFamily:FONT}}>{name}</button>
-          ))}
-          {(Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0)&&(<button onClick={()=>{const name=prompt("Nombre del escenario:");if(name?.trim()){const k=name.trim();if(scenarios[k]&&!confirm(`Ya existe el escenario "${k}". ¿Sobreescribir?`))return;setScenarios(p=>({...p,[k]:{adjPrices:{...adjPrices},adjCostos:{...adjCostos},adjPct:{...adjPct}}}));}}} style={{fontSize:11,padding:"4px 10px",borderRadius:20,border:`1px dashed #9CA3AF`,background:"#fff",color:"#374151",cursor:"pointer",fontFamily:FONT}}>+ Guardar escenario</button>)}
-          {Object.keys(scenarios).length===0&&Object.keys(adjPrices).length===0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>Ajustá precios y guardá como escenario para comparar</span>}
-        </div>
-      </div>
-
-      {/* IA */}
-      <div style={{background:BLUE,borderRadius:12,padding:"16px 20px",marginBottom:"1.5rem"}}>
-        <p style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.6)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Ajuste de precios con IA</p>
-        <div style={{display:"flex",gap:8}}>
-          <input value={chatIn} onChange={e=>setChatIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendChat()} placeholder='Ej: "Bajá el C/F de AMBA 6500_PYME al 75%"' disabled={chatLoading} style={{...inp,flex:1,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff"}}/>
-          <button onClick={sendChat} disabled={!chatIn.trim()||chatLoading} style={{...btnP,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.3)",padding:"8px 20px",whiteSpace:"nowrap"}}>{chatLoading?"...":"Enviar →"}</button>
-        </div>
-        {chat.length>0&&(()=>{const last=chat[chat.length-1];if(last.role!=="assistant")return null;return(<div style={{marginTop:12,padding:"10px 14px",background:"rgba(255,255,255,0.1)",borderRadius:8,fontSize:13,color:"rgba(255,255,255,0.9)",lineHeight:1.55,fontFamily:FONT}}>{last.upd&&<span style={{fontSize:11,color:"#34D399",display:"block",marginBottom:4,fontWeight:600}}>✓ Precios actualizados</span>}{last.content}</div>);})()}
-      </div>
-
-      {/* OSDE Comparison Toggle */}
-      <div style={{...card(),marginBottom:"1rem",padding:"12px 16px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:compareOsde?12:0}}>
-          <button onClick={()=>setCompareOsde(v=>!v)} style={{...compareOsde?btnP:btnS,fontSize:12,padding:"6px 14px",background:compareOsde?"#7C3AED":"#fff",color:compareOsde?"#fff":"#7C3AED",border:"1.5px solid #7C3AED"}}>
-            {compareOsde?"✓ Comparando con OSDE":"Comparar con OSDE"}
-          </button>
-        </div>
-        {compareOsde&&(Object.keys(osde||{}).length===0
-          ?<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>No hay planes OSDE cargados. Cargalos en "Precios OSDE".</span>
-          :results.length===0
-            ?<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>Cargá una nómina y configurá los planes para ver la comparación.</span>
-            :(()=>{
-              const osdePlans=Object.keys(osde||{}).sort();
-              const rows=results.map(r=>{
-                // Usar osdeKey (por plan vigente) para el mapping OSDE
-                const storedPlan=planMappingOsde[r.osdeKey];
-                // Auto-detectar: si plan vigente coincide con un plan OSDE cargado, usarlo por defecto
-                const mappedPlan=storedPlan!=null?storedPlan:((osde||{})[r.planVigente]?r.planVigente:"");
-                const osdeResult=mappedPlan&&(osde||{})[mappedPlan]?calcOsdeFromEmps(r.empList,(osde||{})[mappedPlan]):null;
-                return{r,mappedPlan,osdeResult};
-              });
-              const totalOmint=rows.reduce((a,{r})=>a+r.bd.totalFac,0);
-              const totalOsde=rows.reduce((a,{osdeResult})=>a+(osdeResult?osdeResult.total:0),0);
-              const hasSomeOsde=rows.some(x=>x.osdeResult);
-              const diffTotal=totalOsde-totalOmint;
-              const diffPctTotal=totalOmint>0?diffTotal/totalOmint*100:0;
-              return(<div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:560}}>
-                  <thead><tr>
-                    <th style={TH({textAlign:"left"})}>Plan Omint</th>
-                    <th style={TH({textAlign:"left",color:"#7C3AED"})}>Plan OSDE</th>
-                    <th style={TH()}>Total Omint</th>
-                    <th style={TH({color:"#7C3AED"})}>Total OSDE</th>
-                    <th style={TH()}>Diferencia</th>
-                    <th style={TH()}>%</th>
-                  </tr></thead>
-                  <tbody>
-                    {rows.map(({r,mappedPlan,osdeResult})=>{
-                      const diff=osdeResult?osdeResult.total-r.bd.totalFac:null;
-                      const pct=diff!==null&&r.bd.totalFac>0?diff/r.bd.totalFac*100:null;
-                      const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
-                      return(<tr key={r.osdeKey}>
-                        <td style={TD({fontWeight:600})}>
-                          <span style={{...badge(zc2.c,zc2.bg),fontSize:10,marginRight:6}}>{r.zona}</span>
-                          {r.planVigente}{r.planVigente!==r.cotId&&<span style={{color:"#9CA3AF",fontWeight:400}}> → {r.cotId}</span>}
-                        </td>
-                        <td style={TD()}>
-                          <select value={mappedPlan} onChange={e=>setPlanMappingOsde(p=>({...p,[r.osdeKey]:e.target.value}))} style={{...inp,width:130,fontSize:12,padding:"4px 8px"}}>
-                            <option value="">—</option>
-                            {osdePlans.map(p=><option key={p} value={p}>{p}</option>)}
-                          </select>
-                        </td>
-                        <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(r.bd.totalFac)}</td>
-                        <td style={TD({textAlign:"right",fontWeight:600,color:"#7C3AED"})}>{osdeResult?`$${fmt(osdeResult.total)}`:"—"}</td>
-                        <td style={TD({textAlign:"right",color:diff===null?"#9CA3AF":diff>0?"#16A34A":"#DC2626",fontWeight:diff!==null?600:400})}>
-                          {diff!==null?`${diff>0?"+":""}$${fmt(Math.abs(diff))}`:"—"}
-                        </td>
-                        <td style={TD({textAlign:"right"})}>
-                          {pct!==null&&<span style={{...badge(pct>0?"#16A34A":"#DC2626",pct>0?"#D1FAE5":"#FEF2F2"),fontSize:11}}>
-                            {pct>0?"+":""}{pct.toFixed(1)}%
-                          </span>}
-                        </td>
-                      </tr>);
-                    })}
-                    {hasSomeOsde&&!multiSim&&(<tr style={{background:"#F5F3FF",borderTop:`2px solid #7C3AED`}}>
-                      <td style={{padding:"10px 12px",fontWeight:700,color:"#7C3AED",fontFamily:FONT}} colSpan={2}>TOTAL</td>
-                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:BLUE,fontFamily:FONT}}>${fmt(totalOmint)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"#7C3AED",fontFamily:FONT}}>${fmt(totalOsde)}</td>
-                      <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:diffTotal>0?"#16A34A":"#DC2626",fontFamily:FONT}}>
-                        {diffTotal>0?"+":""}${fmt(Math.abs(diffTotal))}
-                      </td>
-                      <td style={{padding:"10px 12px",textAlign:"right",fontFamily:FONT}}>
-                        <span style={{...badge(diffPctTotal>0?"#16A34A":"#DC2626",diffPctTotal>0?"#D1FAE5":"#FEF2F2"),fontWeight:700}}>
-                          {diffPctTotal>0?"+":""}{diffPctTotal.toFixed(1)}%
-                        </span>
-                      </td>
-                    </tr>)}
-                  </tbody>
-                </table>
-              </div>);
-            })()
-        )}
-      </div>
-
-      {/* COMPARATIVO DE SIMULACIONES */}
-      {multiSim&&(<div style={{...card(),marginBottom:"1.5rem"}}>
-        <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:"1rem",fontFamily:FONT}}>Comparativo de simulaciones · {emps?.length||0} familias</p>
-        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:500}}>
-          <thead><tr>{["Plan","Facturación","Costo","C/F","Dif. vs anterior"].map((h,i)=><th key={h} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
-          <tbody>{simTotals.map((t,i)=>{const prev=simTotals[i-1];const dif=prev&&prev.fac>0?(t.fac/prev.fac-1)*100:null;return(<tr key={t.cotId}>
-            <td style={TD({fontWeight:700,color:BLUE})}>{planCustomNames[t.adjKeys[0]]||t.cotId}</td>
-            <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(t.fac)}</td>
-            <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(t.costo)}</td>
-            <td style={TD({textAlign:"right"})}><span style={{...badge(cfColor(t.cf),cfBg(t.cf)),minWidth:52,display:"inline-block",textAlign:"center"}}>{t.cf.toFixed(1)}%</span></td>
-            <td style={TD({textAlign:"right",color:"#6B7280"})}>{dif===null?"—":`${dif>0?"+":""}${dif.toFixed(1)}%`}</td>
-          </tr>);})}</tbody>
-        </table></div>
-      </div>)}
-
-      {/* KPIs */}
-      {!multiSim&&<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:"1.5rem"}}>
-        {[{l:"Socios",v:emps?.length||0,bg:"#fff"},{l:"Facturación",v:`$${fmt(grandFac)}`,bg:BLUE,white:true},{l:"Costo",v:`$${fmt(grandCosto)}`,c:"#DC2626",bg:"#FEF2F2"},{l:"C/F global",v:`${grandCF.toFixed(1)}%`,sub:cfLabel(grandCF),c:cfColor(grandCF),bg:cfBg(grandCF)}].map(c=>(<div key={c.l} style={{background:c.bg,border:`1px solid ${c.bg==="#fff"?BORDER:"transparent"}`,borderRadius:12,padding:"1rem 1.25rem"}}>
-          <p style={{fontSize:11,fontWeight:600,color:c.white?"rgba(255,255,255,0.7)":"#6B7280",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>{c.l}</p>
-          <p style={{fontSize:18,fontWeight:700,color:c.white?"#fff":c.c||BLUE,fontFamily:FONT}}>{c.v}</p>
-          {c.sub&&<p style={{fontSize:11,color:c.c,marginTop:2,fontWeight:500,fontFamily:FONT}}>{c.sub}</p>}
-        </div>))}
-      </div>}
-
-      {/* Resumen (en simulación con varios planes, solo hace falta si hay más de una zona) */}
-      {results.length>1&&(!multiSim||results.length>planesSim.length)&&(<div style={{...card(),marginBottom:"1.5rem"}}>
-        <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:"1rem",fontFamily:FONT}}>{isSim?"Detalle por plan simulado y zona":"Resumen por zona y plan"}</p>
-        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:500}}>
-          <thead><tr>{["Zona","Plan","Socios","Facturación","Costo","C/F"].map((h,i)=><th key={h} style={TH({textAlign:i<2?"left":"right"})}>{h}</th>)}</tr></thead>
-          <tbody>{results.map(r=>{const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};return(<tr key={r.osdeKey}>
-            <td style={TD()}><span style={{...badge(zc2.c,zc2.bg),fontSize:11}}>{r.zona}</span></td>
-            <td style={TD({fontWeight:600,color:BLUE})}>{r.cotId}{r.planVigente!==r.cotId&&<span style={{color:"#9CA3AF",fontWeight:400,fontSize:11}}> ← {r.planVigente}</span>}</td>
-            <td style={TD({textAlign:"right",color:"#6B7280"})}>{r.bd.totalSocios}</td>
-            <td style={TD({textAlign:"right",fontWeight:600})}>${fmt(r.bd.totalFac)}</td>
-            <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(r.bd.totalCosto)}</td>
-            <td style={TD({textAlign:"right"})}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),minWidth:52,display:"inline-block",textAlign:"center"}}>{r.bd.cfTotal.toFixed(1)}%</span></td>
-          </tr>);})}</tbody>
-        </table></div>
-      </div>)}
-
-      {/* Desglose por grupo */}
-      {results.map(r=>{
-        const zc2=ZONA_COLORS[r.zona]||{c:BLUE,bg:BLUE_LT};
-        return(<div key={r.osdeKey} style={{...card(),marginBottom:"1.5rem"}}>
-          {(()=>{
-            return(<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>
-              <span style={{...badge(zc2.c,zc2.bg),fontSize:12}}>{r.zona}</span>
-              <span style={{...badge("#fff",BLUE),fontSize:12}}>{r.cotId}</span>
-              {r.planVigente!==r.cotId&&<span style={{fontSize:12,color:"#9CA3AF",fontFamily:FONT}}>← {r.planVigente}</span>}
-              <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>{r.bd.totalSocios} socios · banda 200-499</span>
-              {r.bd.skipped>0&&<span style={{fontSize:11,color:"#DC2626",fontFamily:FONT,fontWeight:600}}>⚠ {r.bd.skipped} fila{r.bd.skipped>1?"s":""} sin edad válida (no incluida{r.bd.skipped>1?"s":""})</span>}
-              {r.mapping.length>0&&<span style={{fontSize:11,color:"#9CA3AF",fontFamily:FONT}}>← {r.mapping.map(m=>m.from).join(", ")}</span>}
-              <span style={{marginLeft:"auto",...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontSize:11}}>C/F {r.bd.cfTotal.toFixed(1)}%</span>
-              {(adjPrices[r.adjKey]||adjCostos[r.adjKey])&&<button onClick={()=>{setAdjPrices(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjCostos(prev=>{const n={...prev};delete n[r.adjKey];return n;});setAdjPct(prev=>{const n={...prev};delete n[r.adjKey];return n;});}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,border:`1px solid #DC2626`,background:"#FEF2F2",color:"#DC2626",cursor:"pointer",fontFamily:FONT,fontWeight:500}}>↺ Restaurar</button>}
-              {/* Nombre del plan en la propuesta (PDF, Excel y nómina valorizada): siempre editable */}
-              <div style={{display:"flex",alignItems:"center",gap:6,width:"100%",marginTop:4}}>
-                <span style={{fontSize:11,color:BLUE,fontFamily:FONT,fontWeight:600,whiteSpace:"nowrap"}}>Nombre del plan cotizado:</span>
-                <input
-                  value={planCustomNames[r.adjKey]??r.cotId}
-                  onChange={e=>setPlanCustomNames(prev=>({...prev,[r.adjKey]:e.target.value}))}
-                  placeholder={r.cotId}
-                  style={{flex:1,fontSize:12,padding:"4px 8px",border:`1.5px solid ${BORDER}`,borderRadius:6,fontFamily:FONT,background:"#fff",color:BLUE,colorScheme:"light",outline:"none",maxWidth:320}}
-                />
-              </div>
-            </div>);
-          })()}
-          <AjustePrecios adj={adjPct[r.adjKey]} onChange={adj=>aplicarAjuste(r,adj)}/>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:660}}>
-              <thead><tr>
-                <th style={TH({textAlign:"left"})}>Categoría</th><th style={TH()}>N°</th>
-                <th style={TH({color:BLUE})}>Precio ($)</th><th style={TH({color:"#7C3AED"})}>Costo ($)</th>
-                <th style={TH()}>Facturación</th><th style={TH({color:"#DC2626"})}>Costo Total</th><th style={TH()}>C/F</th>
-              </tr></thead>
-              <tbody>
-                {r.bd.rows.map(row=>{
-                  const hadjP=adjPrices[r.adjKey]?.[row.id]!==undefined;
-                  const hadjC=adjCostos[r.adjKey]?.[row.id]!==undefined;
-                  return(<tr key={row.id} style={{opacity:row.count===0?0.3:1}}>
-                    <td style={TD({fontWeight:500})}>{row.label}</td>
-                    <td style={TD({textAlign:"right",color:"#6B7280"})}>{row.count}</td>
-                    <td style={TD({textAlign:"right"})}><div style={{display:"flex",alignItems:"center",gap:2,justifyContent:"flex-end"}}><span style={{fontSize:11,color:hadjP?BLUE:"#6B7280",fontFamily:FONT}}>$</span><input type="number" min={0} value={row.precio} onChange={e=>setPrecioManual(r,row.id,parseFloat(e.target.value)||0)} style={{...numInp(80,hadjP),textAlign:"right"}}/></div></td>
-                    <td style={TD({textAlign:"right"})}><div style={{display:"flex",alignItems:"center",gap:2,justifyContent:"flex-end"}}><span style={{fontSize:11,color:hadjC?"#7C3AED":"#6B7280",fontFamily:FONT}}>$</span><input type="number" min={0} value={row.costo} onChange={e=>{const v=parseFloat(e.target.value)||0;setAdjCostos(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||{}),[row.id]:v}}));}} style={{...numInp(80,hadjC),textAlign:"right"}}/></div></td>
-                    <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>${fmt(row.fac)}</td>
-                    <td style={TD({textAlign:"right",color:"#DC2626"})}>${fmt(row.cos)}</td>
-                    <td style={TD({textAlign:"right"})}>{row.fac>0&&<span style={{...badge(cfColor(row.cf),cfBg(row.cf)),minWidth:44,display:"inline-block",textAlign:"center",fontSize:11}}>{row.cf.toFixed(0)}%</span>}</td>
-                  </tr>);
-                })}
-                <tr style={{background:BLUE_LT}}>
-                  <td style={{padding:"10px 12px",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>Total</td>
-                  <td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/><td style={{borderTop:`2px solid ${BLUE}`}}/>
-                  <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:BLUE,borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(r.bd.totalFac)}</td>
-                  <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"#DC2626",borderTop:`2px solid ${BLUE}`,fontFamily:FONT}}>${fmt(r.bd.totalCosto)}</td>
-                  <td style={{padding:"10px 12px",textAlign:"right",borderTop:`2px solid ${BLUE}`}}><span style={{...badge(cfColor(r.bd.cfTotal),cfBg(r.bd.cfTotal)),fontWeight:700,fontSize:12}}>{r.bd.cfTotal.toFixed(1)}%</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          {/* MEJORAS per plan */}
-          {(()=>{
-            const hasAnyOpts=MEJORAS_DEF.some(m=>Object.keys((mejoras||{})[m.id]||{}).length>0);
-            if(!hasAnyOpts)return null;
-            return(<div style={{marginTop:"1rem",padding:"12px 14px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8}}>
-              <p style={{fontSize:12,fontWeight:600,color:"#166534",marginBottom:8,fontFamily:FONT}}>Mejoras opcionales</p>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {MEJORAS_DEF.map(m=>{
-                  const options=Object.keys((mejoras||{})[m.id]||{});
-                  if(options.length===0)return null;
-                  const selected=r.mejSel[m.id]||null;
-                  return(<div key={m.id} style={{display:"flex",alignItems:"center",gap:10}}>
-                    <input type="checkbox"
-                      checked={!!selected}
-                      onChange={e=>{
-                        const firstOpt=options[0];
-                        setPlanMejoras(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||r.mejSel),[m.id]:e.target.checked?firstOpt:null}}));
-                      }}
-                      id={`mej-${r.adjKey}-${m.id}`}
-                    />
-                    <label htmlFor={`mej-${r.adjKey}-${m.id}`} style={{fontSize:12,fontFamily:FONT,minWidth:120}}>{m.label}</label>
-                    {!!selected&&options.length>1&&(
-                      <select value={selected} onChange={e=>setPlanMejoras(prev=>({...prev,[r.adjKey]:{...(prev[r.adjKey]||r.mejSel),[m.id]:e.target.value}}))} style={{fontSize:12,padding:"3px 8px",borderRadius:6,border:"1px solid #D1D5DB",fontFamily:FONT}}>
-                        {options.map(o=><option key={o} value={o}>{o}</option>)}
-                      </select>
-                    )}
-                    {!!selected&&options.length===1&&(
-                      <span style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>{selected}</span>
-                    )}
-                  </div>);
-                })}
-              </div>
-            </div>);
-          })()}
-          {/* Comparación con precios vigentes */}
-          {adjPrices[r.adjKey]&&(()=>{
-            const base=precios?.[r.zona]?.[r.planId]||{};
-            const hasChanges=CAT_IDS.some(id=>adjPrices[r.adjKey]?.[id]!==undefined&&Math.round(adjPrices[r.adjKey][id])!==Math.round(base[id]||0));
-            if(!hasChanges)return null;
-            return(<div style={{marginTop:"1rem",padding:"12px 14px",background:"#F8FAFF",border:`1px solid ${BORDER}`,borderRadius:8}}>
-              <p style={{fontSize:11,fontWeight:600,color:"#6B7280",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Comparación con precios vigentes</p>
-              <div style={{overflowX:"auto"}}>
-                <table style={{borderCollapse:"collapse",fontSize:12,width:"100%"}}>
-                  <thead><tr>
-                    <th style={TH({textAlign:"left",fontSize:10})}>Categoría</th>
-                    <th style={TH({fontSize:10})}>Vigente</th>
-                    <th style={TH({fontSize:10})}>Cotización</th>
-                    <th style={TH({fontSize:10})}>Diferencia</th>
-                  </tr></thead>
-                  <tbody>{CATS.map(cat=>{
-                    const vigente=base[cat.id]||0;
-                    const cotiz=adjPrices[r.adjKey]?.[cat.id]??vigente;
-                    if(vigente===0&&cotiz===0)return null;
-                    const diff=cotiz-vigente;
-                    const pct=vigente>0?((cotiz-vigente)/vigente*100):0;
-                    const changed=Math.round(cotiz)!==Math.round(vigente);
-                    return(<tr key={cat.id} style={{background:changed?"#FFF7ED":"transparent"}}>
-                      <td style={TD({fontWeight:changed?600:400,fontSize:12})}>{cat.label}</td>
-                      <td style={TD({textAlign:"right",fontSize:12,color:"#6B7280"})}>$ {Math.round(vigente).toLocaleString("es-AR")}</td>
-                      <td style={TD({textAlign:"right",fontSize:12,fontWeight:changed?600:400,color:changed?(diff>0?"#16A34A":"#DC2626"):"#111827"})}>$ {Math.round(cotiz).toLocaleString("es-AR")}</td>
-                      <td style={TD({textAlign:"right",fontSize:12})}>{changed?<span style={{color:diff>0?"#16A34A":"#DC2626",fontWeight:600}}>{diff>0?"+":""}{pct.toFixed(1)}%</span>:<span style={{color:"#9CA3AF"}}>—</span>}</td>
-                    </tr>);
-                  })}</tbody>
-                </table>
-              </div>
-            </div>);
-          })()}
-        </div>);
-      })}
-      {results.length===0&&(<div style={{...card(),textAlign:"center",padding:"3rem",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay empleados mapeados a ningún plan Omint.</p></div>)}
-      <button onClick={()=>setSub("comision")} style={{...btnS,marginTop:"0.5rem"}}>← Volver</button>
-    </div>)}
+    {/* STEP 3: PLANILLA DE COTIZACIÓN */}
+    {sub===3&&<Planilla
+      results={results} isSim={isSim} multiSim={multiSim} simTotals={simTotals} emps={emps}
+      grandFac={grandFac} grandCosto={grandCosto} grandCF={grandCF} inversions={inversions}
+      precios={precios} mejoras={mejoras} osde={osde}
+      adjPct={adjPct} adjPrices={adjPrices} adjCostos={adjCostos} setAdjCostos={setAdjCostos}
+      aplicarAjuste={aplicarAjuste} setPrecioManual={setPrecioManual}
+      setPlanMejoras={setPlanMejoras}
+      planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames}
+      brokerPct={brokerPct} setBrokerPct={setBrokerPct}
+      planMappingOsde={planMappingOsde} setPlanMappingOsde={setPlanMappingOsde}
+      empresa={empresa} setEmpresa={setEmpresa} knownEmpresas={knownEmpresas}
+      chat={chat} chatIn={chatIn} setChatIn={setChatIn} chatLoading={chatLoading} sendChat={sendChat}
+      aiLog={aiLog} setAiLog={setAiLog}
+      scenarios={scenarios} setScenarios={setScenarios} setAdjPrices={setAdjPrices} setAdjPct={setAdjPct}
+      guardar={guardar} saveMsg={saveMsg} onExportar={()=>setShowExport(true)} onVolver={()=>setSub("comision")}
+    />}
   </div>);
 }
 
