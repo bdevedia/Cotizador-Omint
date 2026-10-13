@@ -42,12 +42,24 @@ textarea {
   color: #111827;
 }
 
+/* Campos numéricos sin flechas: ocupan lugar y tapan el número en celdas angostas */
+input.sin-flechas::-webkit-outer-spin-button,
+input.sin-flechas::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.sin-flechas {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 body {
   margin: 0;
 }
 
 #root {
-  width: 1126px;
+  /* La app usa todo el ancho de la ventana (la planilla de cotización lo necesita) */
+  width: 100%;
   max-width: 100%;
   margin: 0 auto;
   text-align: center;
