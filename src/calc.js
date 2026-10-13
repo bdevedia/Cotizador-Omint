@@ -114,4 +114,11 @@ function checkPriceInversions(results){
   return violations;
 }
 
-export { calcBD, calcMultiplier, pctAjuste, capitado054, capitado059, preciosCapitados, calcOsdeFromEmps, checkPriceInversions };
+// ── PLAN OSDE PARA COMPARAR ──────────────────────────────────────────────────
+// Plan OSDE por defecto: el plan vigente si tiene precios OSDE cargados
+function planOsdeDe(planMappingOsde,osde,osdeKey,planVigente){
+  const stored=planMappingOsde[osdeKey];
+  return stored!=null?stored:((osde||{})[planVigente]?planVigente:"");
+}
+
+export { planOsdeDe, calcBD, calcMultiplier, pctAjuste, capitado054, capitado059, preciosCapitados, calcOsdeFromEmps, checkPriceInversions };

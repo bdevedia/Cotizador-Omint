@@ -2,7 +2,7 @@ import { useState, Fragment } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER, GRAY, CATS, CAT_IDS, ZONA_COLORS, MEJORAS_DEF } from "../constants";
 import { cfColor, cfBg, fmt } from "../utils";
 import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
-import { pctAjuste, capitado059, calcOsdeFromEmps } from "../calc";
+import { pctAjuste, capitado059, calcOsdeFromEmps, planOsdeDe } from "../calc";
 import AjustePrecios from "./AjustePrecios";
 
 // ── PLANILLA DE COTIZACIÓN (paso 3) ───────────────────────────────────────────
@@ -38,8 +38,8 @@ function Planilla(props){
   const {results,isSim,multiSim,simTotals,emps,grandFac,grandCosto,grandCF,inversions,
     precios,mejoras,osde,
     adjPct,adjPrices,adjCostos,setAdjCostos,aplicarAjuste,setPrecioManual,
-    setPlanMejoras,planCustomNames,setPlanCustomNames,
-    brokerPct,setBrokerPct,planMappingOsde,setPlanMappingOsde,
+    setPlanMejoras,planCustomNames,
+    brokerPct,setBrokerPct,planMappingOsde,
     empresa,setEmpresa,knownEmpresas,
     chat,chatIn,setChatIn,chatLoading,sendChat,aiLog,setAiLog,
     scenarios,setScenarios,setAdjPrices,setAdjPct,
@@ -74,8 +74,7 @@ function Planilla(props){
   const distTot=Object.fromEntries(CAT_IDS.map(id=>[id,distFilas.reduce((a,r)=>a+cnt(r,id),0)]));
   const totalSocios=CAT_IDS.reduce((a,id)=>a+distTot[id],0);
 
-  const osdePlans=Object.keys(osde||{}).sort();
-  const hayOsde=osdePlans.length>0;
+  const hayOsde=Object.keys(osde||{}).length>0;
 
   // Vs. plan anterior (simulación): orden de simTotals
   const simIdx=Object.fromEntries((simTotals||[]).map((t,i)=>[t.cotId,i]));
@@ -290,7 +289,7 @@ function Planilla(props){
         </Seccion>
 
         {/* 4 · RESULTADO */}
-        <Seccion titulo="4 · Resultado">
+        <Seccion titulo="4 · Resultado" extra={<span style={{fontSize:12,color:"#D6DCF5",fontFamily:FONT}}>El nombre{hayOsde?" y el plan OSDE":""} se cambian en el paso 2</span>}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:hayOsde?960:720}}>
             <thead><tr>
               {!isSim&&<th style={thL}>Plan vigente</th>}
@@ -302,23 +301,20 @@ function Planilla(props){
             <tbody>
               {results.map(r=>{
                 const vs=vsAnterior(r);
-                const stored=planMappingOsde[r.osdeKey];
-                const osdePlan=stored!=null?stored:((osde||{})[r.planVigente]?r.planVigente:"");
+                const osdePlan=planOsdeDe(planMappingOsde,osde,r.osdeKey,r.planVigente);
                 const osdeRes=osdePlan&&(osde||{})[osdePlan]?calcOsdeFromEmps(r.empList,osde[osdePlan]):null;
                 const difOsde=osdeRes&&osdeRes.total>0?(r.bd.totalFac/osdeRes.total-1)*100:null;
                 return(<tr key={r.osdeKey}>
                   {!isSim&&<td style={td({fontWeight:600})}>{zonaBadge(r.zona)}{r.planVigente}</td>}
                   <td style={td({fontWeight:700,color:BLUE,whiteSpace:"nowrap"})}>{isSim&&zonaBadge(r.zona)}{r.cotId}</td>
-                  <td style={td()}><input value={planCustomNames[r.adjKey]??r.cotId} onChange={e=>setPlanCustomNames(prev=>({...prev,[r.adjKey]:e.target.value}))} aria-label={`Nombre en la propuesta de ${r.cotId}`} style={{...inp,padding:"5px 8px",fontSize:12,width:150}}/></td>
+                  <td style={td({color:"#374151"})}>{nombre(r)}</td>
                   <td style={td({textAlign:"right",color:"#4B5563"})}>{r.bd.totalSocios}</td>
                   <td style={td({textAlign:"right",fontWeight:700})}>${fmt(r.bd.totalFac)}</td>
                   <td style={td({textAlign:"right",color:"#B42318"})}>${fmt(r.bd.totalCosto)}</td>
                   <td style={td({textAlign:"right"})}>{cfBadge(r.bd.cfTotal)}</td>
                   {isSim&&<td style={td({textAlign:"right",color:"#4B5563"})}>{vs===null?"—":fmtPct(vs/100)}</td>}
                   {hayOsde&&<>
-                    <td style={td()}><select value={osdePlan} onChange={e=>setPlanMappingOsde(p=>({...p,[r.osdeKey]:e.target.value}))} aria-label={`Plan OSDE para ${r.planVigente}`} style={{...inp,width:96,fontSize:12,padding:"4px 6px"}}>
-                      <option value="">—</option>{osdePlans.map(p=><option key={p} value={p}>{p}</option>)}
-                    </select></td>
+                    <td style={td({color:osdePlan?"#374151":"#9CA3AF"})}>{osdePlan||"—"}</td>
                     <td style={td({textAlign:"right",color:"#7C3AED"})}>{osdeRes?`$${fmt(osdeRes.total)}`:"—"}</td>
                     <td style={td({textAlign:"right"})}>{difOsde===null?"—":<span style={{...badge(difOsde<0?"#065F46":"#B42318",difOsde<0?"#D1FAE5":"#FEF2F2")}}>{fmtPct(difOsde/100)}</span>}</td>
                   </>}

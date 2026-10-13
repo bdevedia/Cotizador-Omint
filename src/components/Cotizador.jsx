@@ -10,6 +10,7 @@ import { parseNominaFija, downloadTemplate } from "../parsers";
 import { calcBD, pctAjuste, checkPriceInversions } from "../calc";
 import Salidas from "./Salidas";
 import NominaResumen from "./NominaResumen";
+import PlanesPropuesta from "./PlanesPropuesta";
 import Planilla from "./Planilla";
 
 // ── MODAL TITULARES DUPLICADOS ────────────────────────────────────────────────
@@ -267,6 +268,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const grandFac=results.reduce((a,r)=>a+r.bd.totalFac,0);
   const grandCosto=results.reduce((a,r)=>a+r.bd.totalCosto,0);
   const grandCF=grandFac>0?grandCosto/grandFac*100:0;
+  const gruposPaso2=sub==="mapeo"?buildGroups():[];
   const inversions=sub===3||sub==="salidas"?checkPriceInversions(results):[];
   // Totales por plan simulado (sumando zonas)
   const simTotals=isSim?planesSim.map(cotId=>{
@@ -563,7 +565,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     </div>)}
 
     {/* STEP 2 (SIMULACIÓN): ELEGIR PLANES */}
-    {sub==="mapeo"&&isSim&&(<div>
+    {sub==="mapeo"&&isSim&&(<div style={{textAlign:"left"}}>
       <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Planes a simular</h3>
       <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Elegí uno o varios planes Omint. Cada plan se cotiza con toda la nómina ({emps?.length||0} familias); el plan vigente de cada empleado no se tiene en cuenta.</p>
       <div style={card()}>
@@ -586,7 +588,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       {/* DUPLICAR PLAN */}
       <div style={{...card(),marginTop:"1rem"}}>
         <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Duplicar plan</p>
-        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: en la cotización le elegís mejoras, ajustes y el nombre que va en la propuesta.</p>
+        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: abajo le ponés el nombre que va en la propuesta y en la planilla le elegís mejoras y ajustes.</p>
         {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
           {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
             {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar copia" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
@@ -600,6 +602,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           <button onClick={()=>duplicarPlan(planADuplicar)} disabled={!planADuplicar} style={{...btnS,fontSize:12,opacity:planADuplicar?1:0.5}}>⧉ Duplicar</button>
         </div>
       </div>
+      <PlanesPropuesta grupos={gruposPaso2} isSim={isSim} osde={osde} planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames} planMappingOsde={planMappingOsde} setPlanMappingOsde={setPlanMappingOsde}/>
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
         <button onClick={()=>setSub(3)} disabled={planesSim.length===0} style={{...btnP,opacity:planesSim.length===0?0.5:1,cursor:planesSim.length===0?"not-allowed":"pointer"}}>Continuar →</button>
@@ -607,7 +610,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     </div>)}
 
     {/* STEP 2: MAPEO */}
-    {sub==="mapeo"&&!isSim&&(<div>
+    {sub==="mapeo"&&!isSim&&(<div style={{textAlign:"left"}}>
       <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Mapeo de planes</h3>
       <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Asigná cada plan externo al plan Omint equivalente.</p>
       <div style={card()}>
@@ -633,7 +636,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       {/* DUPLICAR PLAN */}
       <div style={{...card(),marginTop:"1rem"}}>
         <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Duplicar plan</p>
-        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: en la cotización le elegís mejoras, ajustes y el nombre que va en la propuesta.</p>
+        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: abajo le ponés el nombre que va en la propuesta y en la planilla le elegís mejoras y ajustes.</p>
         {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
           {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
             {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar copia" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
@@ -647,6 +650,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           <button onClick={()=>duplicarPlan(planADuplicar)} disabled={!planADuplicar} style={{...btnS,fontSize:12,opacity:planADuplicar?1:0.5}}>⧉ Duplicar</button>
         </div>
       </div>
+      <PlanesPropuesta grupos={gruposPaso2} isSim={isSim} osde={osde} planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames} planMappingOsde={planMappingOsde} setPlanMappingOsde={setPlanMappingOsde}/>
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
         <button onClick={()=>setSub(3)} style={btnP}>Continuar →</button>
@@ -661,9 +665,9 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       adjPct={adjPct} adjPrices={adjPrices} adjCostos={adjCostos} setAdjCostos={setAdjCostos}
       aplicarAjuste={aplicarAjuste} setPrecioManual={setPrecioManual}
       setPlanMejoras={setPlanMejoras}
-      planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames}
+      planCustomNames={planCustomNames}
       brokerPct={brokerPct} setBrokerPct={setBrokerPct}
-      planMappingOsde={planMappingOsde} setPlanMappingOsde={setPlanMappingOsde}
+      planMappingOsde={planMappingOsde}
       empresa={empresa} setEmpresa={setEmpresa} knownEmpresas={knownEmpresas}
       chat={chat} chatIn={chatIn} setChatIn={setChatIn} chatLoading={chatLoading} sendChat={sendChat}
       aiLog={aiLog} setAiLog={setAiLog}
