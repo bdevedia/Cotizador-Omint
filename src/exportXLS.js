@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx-js-style";
 import { CATS, CAT_IDS, ZONA_IDS, MEJORAS_DEF } from "./constants";
-import { calcOsdeFromEmps, pctAjuste } from "./calc";
+import { calcOsdeFromEmps, pctAjuste, planOsdeDe } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
 // Hojas: "Cotización" (todos los planes, un bloque por zona), "Nómina", "Lista de Costos" y
@@ -528,7 +528,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
     // ── SECCIÓN 7: COTIZACIÓN ────────────────────────────────────────────────
     const hasOsde=zResults.some(res=>{
-      const mo=planMappingOsde?.[res.osdeKey||res.adjKey];
+      const mo=planOsdeDe(planMappingOsde||{},osde,res.osdeKey||res.adjKey,res.planVigente);
       return mo&&osde?.[mo];
     });
 
@@ -558,7 +558,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     zResults.forEach((res,pi)=>{
       const pf=planFill(pi);
       // OSDE mapping usa osdeKey (por plan vigente) para comparación correcta
-      const mappedOsde=planMappingOsde?.[res.osdeKey||res.adjKey];
+      const mappedOsde=planOsdeDe(planMappingOsde||{},osde,res.osdeKey||res.adjKey,res.planVigente);
       const osdeResult=mappedOsde&&osde?.[mappedOsde]?calcOsdeFromEmps(res.empList,osde[mappedOsde]):null;
       const osdeFac=osdeResult?osdeResult.total:0;
       totalOsdeAllPlans+=osdeFac;
