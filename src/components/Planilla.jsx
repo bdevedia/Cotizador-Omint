@@ -114,23 +114,23 @@ function Planilla(props){
     {saveMsg&&<div style={{padding:"10px 16px",background:"#D1FAE5",borderRadius:8,fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{saveMsg}</div>}
 
     {/* Resumen por plan */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
       {!multiSim&&!isSim&&(<div style={{...card({padding:"14px 16px"}),background:BLUE,border:"none"}}>
         <p style={{fontSize:12,fontWeight:700,color:"#D6DCF5",fontFamily:FONT,textTransform:"uppercase",letterSpacing:"0.05em"}}>Total cotización</p>
         <p style={{fontSize:20,fontWeight:700,color:"#fff",fontFamily:FONT,margin:"4px 0"}}>${fmt0(grandFac)}</p>
-        <p style={{fontSize:13,color:"#D6DCF5",fontFamily:FONT}}>Costo ${fmt0(grandCosto)} · C/F {grandCF.toFixed(1).replace(".",",")}%</p>
+        <p style={{fontSize:13,color:"#D6DCF5",fontFamily:FONT}}><span style={{whiteSpace:"nowrap"}}>Costo ${fmt0(grandCosto)}</span> · <span style={{whiteSpace:"nowrap"}}>C/F {grandCF.toFixed(1).replace(".",",")}%</span></p>
       </div>)}
       {planes.map(pl=>{const t=totPorPlan[pl.adjKey];return(<div key={pl.adjKey} style={card({padding:"14px 16px"})}>
         <p style={{fontSize:13,fontWeight:700,color:BLUE,fontFamily:FONT}}>{zonaBadge(pl.zona)}{nombre(pl)}</p>
         <p style={{fontSize:20,fontWeight:700,color:"#111827",fontFamily:FONT,margin:"4px 0"}}>${fmt0(t.fac)}</p>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:13,color:"#4B5563",fontFamily:FONT}}>
-          <span>Costo ${fmt0(t.costo)}</span>{cfBadge(t.cf)}
+        <div style={{display:"flex",flexWrap:"wrap",justifyContent:"space-between",alignItems:"center",gap:"4px 8px",fontSize:13,color:"#4B5563",fontFamily:FONT}}>
+          <span style={{whiteSpace:"nowrap"}}>Costo ${fmt0(t.costo)}</span>{cfBadge(t.cf)}
         </div>
       </div>);})}
     </div>
 
     {/* HERRAMIENTAS: IA, escenarios, alertas e historial */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:16,alignItems:"start"}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
         <div style={{background:BLUE,borderRadius:12,padding:16,display:"flex",flexDirection:"column",gap:10}}>
           <label htmlFor="planilla-ia" style={{fontSize:11,fontWeight:700,color:"#D6DCF5",textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT}}>Ajuste de precios con IA</label>
           <textarea id="planilla-ia" rows={3} value={chatIn} onChange={e=>setChatIn(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}}} disabled={chatLoading}
