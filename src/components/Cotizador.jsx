@@ -8,7 +8,7 @@ import { fmt, planTier } from "../utils";
 import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
 import { calcBD, pctAjuste, checkPriceInversions } from "../calc";
-import ExportModal from "./ExportModal";
+import Salidas from "./Salidas";
 import Planilla from "./Planilla";
 
 // ── MODAL TITULARES DUPLICADOS ────────────────────────────────────────────────
@@ -102,7 +102,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   const [adjCostos,setAdjCostos]=useState({});
   const [adjPct,setAdjPct]=useState({}); // {adjKey: ajuste} — ver pctAjuste en calc.js; lo usa el Excel
   const [empresa,setEmpresa]=useState("");
-  const [showExport,setShowExport]=useState(false);
+  const [salidaCfg,setSalidaCfg]=useState({fecha:new Date().toISOString().split("T")[0],validez:"La propuesta tiene validez por un mes desde la fecha de presentación.",formato:"nchoice",textoExtra:"",masaSalarial:""});
   const [chat,setChat]=useState([]);
   const [chatIn,setChatIn]=useState("");
   const [chatLoading,setCL]=useState(false);
@@ -262,11 +262,11 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
     });
   }
 
-  const results=sub===3?buildResults():[];
+  const results=sub===3||sub==="salidas"?buildResults():[];
   const grandFac=results.reduce((a,r)=>a+r.bd.totalFac,0);
   const grandCosto=results.reduce((a,r)=>a+r.bd.totalCosto,0);
   const grandCF=grandFac>0?grandCosto/grandFac*100:0;
-  const inversions=sub===3?checkPriceInversions(results):[];
+  const inversions=sub===3||sub==="salidas"?checkPriceInversions(results):[];
   // Totales por plan simulado (sumando zonas)
   const simTotals=isSim?planesSim.map(cotId=>{
     const rs=results.filter(r=>r.cotId===cotId);
@@ -453,11 +453,10 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     setTimeout(()=>setSaveMsg(""),2500);
   }
 
-  const stepN=sub===1?1:sub==="mapeo"?2:sub==="comision"?3:4;
-  const sDef=[{n:1,l:"Nómina"},{n:2,l:isSim?"Planes":"Mapeo"},{n:3,l:"Comisión"},{n:4,l:"Cotización"}];
+  const stepN=sub===1?1:sub==="mapeo"?2:sub===3?3:4;
+  const sDef=[{n:1,l:"Nómina"},{n:2,l:isSim?"Planes":"Mapeo"},{n:3,l:"Planilla"},{n:4,l:"Salidas"}];
 
   return(<div>
-    {showExport&&<ExportModal results={results} empresa={empresa} empsRef={emps} onClose={()=>setShowExport(false)} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}} planCustomNames={planCustomNames} adjPct={adjPct} listas={{precios,costos}}/>}
     {dupWarning&&<DuplicadosModal items={dupWarning.items} onResolve={resolveDuplicados}/>}
 
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"2rem"}}>
@@ -557,7 +556,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         <p style={{fontSize:12}}>Familias afectadas: {spouseWarning.familias.join(", ")}</p>
       </div>)}
 
-      {emps&&map.titAge&&map.ku&&(<button onClick={()=>pasoPlanes?setSub("mapeo"):setSub("comision")} style={{...btnP,marginTop:"1.5rem"}}>{isSim?"Continuar: elegir planes →":needsMapeo?"Continuar: mapear planes →":"Continuar →"}</button>)}
+      {emps&&map.titAge&&map.ku&&(<button onClick={()=>pasoPlanes?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>{isSim?"Continuar: elegir planes →":needsMapeo?"Continuar: mapear planes →":"Continuar →"}</button>)}
     </div>)}
 
     {/* STEP 2 (SIMULACIÓN): ELEGIR PLANES */}
@@ -600,7 +599,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       </div>
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
-        <button onClick={()=>setSub("comision")} disabled={planesSim.length===0} style={{...btnP,opacity:planesSim.length===0?0.5:1,cursor:planesSim.length===0?"not-allowed":"pointer"}}>Continuar →</button>
+        <button onClick={()=>setSub(3)} disabled={planesSim.length===0} style={{...btnP,opacity:planesSim.length===0?0.5:1,cursor:planesSim.length===0?"not-allowed":"pointer"}}>Continuar →</button>
       </div>
     </div>)}
 
@@ -647,25 +646,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       </div>
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
-        <button onClick={()=>setSub("comision")} style={btnP}>Continuar →</button>
-      </div>
-    </div>)}
-
-    {/* STEP: COMISIÓN BROKER */}
-    {sub==="comision"&&(<div>
-      <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>¿Hay comisión del broker?</h3>
-      <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Si el broker cobra una comisión mensual, ingresá el porcentaje. Se sumará al costo de todos los planes en el análisis interno.</p>
-      <div style={card()}>
-        <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Comisión del broker (%)</label>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <input type="number" value={brokerPct} onChange={e=>setBrokerPct(e.target.value)} placeholder="Ej: 4" min="0" max="100" style={{...inp,maxWidth:140,textAlign:"right"}}/>
-          <span style={{fontSize:13,color:"#374151",fontFamily:FONT}}>%</span>
-        </div>
-        <p style={{fontSize:12,color:"#6B7280",marginTop:8,fontFamily:FONT}}>Dejá vacío o en 0 si no hay comisión.</p>
-      </div>
-      <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
-        <button onClick={()=>setSub(pasoPlanes?"mapeo":1)} style={btnS}>← Anterior</button>
-        <button onClick={()=>setSub(3)} style={btnP}>Ver cotización →</button>
+        <button onClick={()=>setSub(3)} style={btnP}>Continuar →</button>
       </div>
     </div>)}
 
@@ -684,8 +665,14 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       chat={chat} chatIn={chatIn} setChatIn={setChatIn} chatLoading={chatLoading} sendChat={sendChat}
       aiLog={aiLog} setAiLog={setAiLog}
       scenarios={scenarios} setScenarios={setScenarios} setAdjPrices={setAdjPrices} setAdjPct={setAdjPct}
-      guardar={guardar} saveMsg={saveMsg} onExportar={()=>setShowExport(true)} onVolver={()=>setSub("comision")}
+      guardar={guardar} saveMsg={saveMsg} onExportar={()=>setSub("salidas")} onVolver={()=>setSub(pasoPlanes?"mapeo":1)}
     />}
+
+    {/* STEP 4: SALIDAS */}
+    {sub==="salidas"&&<Salidas results={results} empresa={empresa} setEmpresa={setEmpresa} cfg={salidaCfg} setCfg={setSalidaCfg}
+      emps={emps} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}}
+      planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames} adjPct={adjPct} listas={{precios,costos}}
+      guardar={guardar} saveMsg={saveMsg} onVolver={()=>setSub(3)}/>}
   </div>);
 }
 
