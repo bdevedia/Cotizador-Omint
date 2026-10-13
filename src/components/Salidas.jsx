@@ -21,8 +21,6 @@ const AYUDA_FORMATO={
 // A4 a 96 dpi y escala de la vista previa
 const A4_W=794,A4_H=1123,ESCALA=0.7;
 
-// inp ocupa el 100%: con border-box no se sale de la tarjeta
-const campo={...inp,boxSizing:"border-box"};
 const lbl={fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT};
 
 function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,planMappingOsde,planMejoras,mejoras,
@@ -101,16 +99,16 @@ function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,plan
         <div style={{...card({padding:18}),display:"flex",flexDirection:"column",gap:14}}>
           <div>
             <label htmlFor="sal-empresa" style={lbl}>Empresa</label>
-            <input id="sal-empresa" value={empresa} onChange={e=>setEmpresa(e.target.value)} placeholder="Nombre de la empresa" style={campo}/>
+            <input id="sal-empresa" value={empresa} onChange={e=>setEmpresa(e.target.value)} placeholder="Nombre de la empresa" style={inp}/>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,2fr)",gap:12}}>
             <div>
               <label htmlFor="sal-fecha" style={lbl}>Fecha</label>
-              <input id="sal-fecha" type="date" value={cfg.fecha} onChange={e=>upd("fecha",e.target.value)} style={campo}/>
+              <input id="sal-fecha" type="date" value={cfg.fecha} onChange={e=>upd("fecha",e.target.value)} style={inp}/>
             </div>
             <div>
               <label htmlFor="sal-validez" style={lbl}>Validez</label>
-              <input id="sal-validez" value={cfg.validez} onChange={e=>upd("validez",e.target.value)} style={campo}/>
+              <input id="sal-validez" value={cfg.validez} onChange={e=>upd("validez",e.target.value)} style={inp}/>
             </div>
           </div>
           <div>
@@ -120,17 +118,17 @@ function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,plan
                 {multiZona&&<span style={{...badge(ZONA_COLORS[r.zona]?.c||BLUE,ZONA_COLORS[r.zona]?.bg||BLUE_LT),fontSize:10}}>{r.zona}</span>}
                 <span style={{fontSize:12,color:"#4B5563",fontFamily:FONT,minWidth:110}}>{r.cotId}</span>
                 <input value={planCustomNames[r.adjKey]??r.cotId} onChange={e=>setPlanCustomNames(p=>({...p,[r.adjKey]:e.target.value}))}
-                  aria-label={`Nombre en la propuesta de ${r.cotId}`} style={{...campo,flex:1,padding:"6px 10px"}}/>
+                  aria-label={`Nombre en la propuesta de ${r.cotId}`} style={{...inp,flex:1,padding:"6px 10px"}}/>
               </div>))}
             </div>
           </div>
           <div>
             <label htmlFor="sal-extra" style={lbl}>Texto adicional <span style={{fontWeight:400,textTransform:"none",letterSpacing:0,color:"#6B7280"}}>(nota extra en el PDF)</span></label>
-            <textarea id="sal-extra" value={cfg.textoExtra} onChange={e=>upd("textoExtra",e.target.value)} rows={2} style={{...campo,resize:"vertical",lineHeight:1.5}}/>
+            <textarea id="sal-extra" value={cfg.textoExtra} onChange={e=>upd("textoExtra",e.target.value)} rows={2} style={{...inp,resize:"vertical",lineHeight:1.5}}/>
           </div>
           <div>
             <label htmlFor="sal-masa" style={lbl}>Masa salarial <span style={{fontWeight:400,textTransform:"none",letterSpacing:0,color:"#6B7280"}}>(opcional, para el Excel)</span></label>
-            <input id="sal-masa" type="number" className="sin-flechas" value={cfg.masaSalarial} onChange={e=>upd("masaSalarial",e.target.value)} placeholder="Ej: 1239337852" style={campo}/>
+            <input id="sal-masa" type="number" className="sin-flechas" value={cfg.masaSalarial} onChange={e=>upd("masaSalarial",e.target.value)} placeholder="Ej: 1239337852" style={inp}/>
             {ms>0&&<p style={{fontSize:12,color:"#4B5563",marginTop:6,fontFamily:FONT}}>
               Aporte estimado: <strong>${Math.round(aporte).toLocaleString("es-AR")}</strong> · Saldo: <strong style={{color:totalFac-aporte>0?"#B42318":"#166534"}}>${Math.round(totalFac-aporte).toLocaleString("es-AR")}</strong>
             </p>}

@@ -7,7 +7,7 @@ import { planOsdeDe } from "../calc";
 // plan vigente. Se definen una sola vez acá; la planilla los muestra y Salidas
 // permite retocar el nombre antes de enviar.
 
-const campo={...inp,boxSizing:"border-box",padding:"6px 10px"};
+const campo={...inp,padding:"6px 10px"};
 
 function PlanesPropuesta({grupos,isSim,osde,planCustomNames,setPlanCustomNames,planMappingOsde,setPlanMappingOsde}){
   if(grupos.length===0)return null;
