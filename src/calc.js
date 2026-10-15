@@ -121,4 +121,28 @@ function planOsdeDe(planMappingOsde,osde,osdeKey,planVigente){
   return stored!=null?stored:((osde||{})[planVigente]?planVigente:"");
 }
 
-export { planOsdeDe, calcBD, calcMultiplier, pctAjuste, capitado054, capitado059, preciosCapitados, calcOsdeFromEmps, checkPriceInversions };
+// ── BANDAS DE CÁPITAS ────────────────────────────────────────────────────────
+// Rango de una banda a partir de su rótulo: "50 a 199" → [50,199], "Hasta 49" → [0,49],
+// "500 o más" / "+500" → [500,∞]. Sin números → null.
+function rangoBanda(label){
+  const n=(String(label).match(/\d+/g)||[]).map(Number);
+  if(n.length===0)return null;
+  if(n.length>=2)return{lo:Math.min(n[0],n[1]),hi:Math.max(n[0],n[1])};
+  if(/hasta|menos|</i.test(label))return{lo:0,hi:/menos|</i.test(label)?n[0]-1:n[0]};
+  if(/m[aá]s|\+|>|mayor|adelante/i.test(label))return{lo:/>|m[aá]s de|mayor/i.test(label)&&!/o m[aá]s/i.test(label)?n[0]+1:n[0],hi:Infinity};
+  return{lo:n[0],hi:n[0]};
+}
+function ordenarBandas(labels){
+  return [...labels].sort((a,b)=>(rangoBanda(a)?.lo??Infinity)-(rangoBanda(b)?.lo??Infinity));
+}
+// Banda que corresponde a una cantidad de cápitas. Si cae en un hueco, la banda más alta
+// que empiece por debajo; si está por debajo de todas, la primera.
+function bandaPorCapitas(labels,capitas){
+  const ord=ordenarBandas(labels);
+  const exacta=ord.find(l=>{const r=rangoBanda(l);return r&&capitas>=r.lo&&capitas<=r.hi;});
+  if(exacta)return exacta;
+  const debajo=ord.filter(l=>(rangoBanda(l)?.lo??Infinity)<=capitas);
+  return debajo.length?debajo[debajo.length-1]:ord[0];
+}
+
+export { rangoBanda, ordenarBandas, bandaPorCapitas, planOsdeDe, calcBD, calcMultiplier, pctAjuste, capitado054, capitado059, preciosCapitados, calcOsdeFromEmps, checkPriceInversions };
