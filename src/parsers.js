@@ -344,5 +344,8 @@ function downloadTemplate(){
   XLSX.writeFile(wb,"template_nomina_omint.xlsx");
 }
 
-export { parseNominaFija, downloadTemplate, parsePreciosFile, parseCostosFile,
+// Columnas que deja parseNominaFija en cada fila (una por grupo familiar)
+const MAP_NOMINA={titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"};
+
+export { MAP_NOMINA, parseNominaFija, downloadTemplate, parsePreciosFile, parseCostosFile,
   parseOsdeFile, downloadOsdeTemplate };

@@ -3,11 +3,13 @@ import * as XLSX from "xlsx-js-style";
 import { FONT, BLUE, BLUE_LT, BORDER, CAT_IDS, ZONA_IDS, ZONA_COLORS, MEJORAS_DEF } from "../constants";
 import { fmt, planTier } from "../utils";
 import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
-import { parseNominaFija, downloadTemplate } from "../parsers";
-import { calcBD, pctAjuste, checkPriceInversions, bandaPorCapitas, ordenarBandas, rangoBanda, planDeCosto } from "../calc";
+import { parseNominaFija, downloadTemplate, MAP_NOMINA } from "../parsers";
+import { leerCotizacion } from "../cotizacionGuardada";
+import { calcBD, pctAjuste, checkPriceInversions, bandaPorCapitas, ordenarBandas, rangoBanda } from "../calc";
 import Salidas from "./Salidas";
 import NominaResumen from "./NominaResumen";
 import PlanesPropuesta from "./PlanesPropuesta";
+import { construirResultados, construirGrupos } from "../cotizacion";
 import Planilla from "./Planilla";
 
 // ── MODAL TITULARES DUPLICADOS ────────────────────────────────────────────────
@@ -91,20 +93,23 @@ function DuplicadosModal({items,onResolve}){
 }
 
 // ── COTIZADOR ─────────────────────────────────────────────────────────────────
-function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey}){
-  const [sub,setSub]=useState(1);
-  const [emps,setEmps]=useState(null);
-  const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",planCol:"",zonaCol:""});
-  const [forcedZona,setForcedZona]=useState(null);
-  const [planMapping,setPlanMapping]=useState({});
-  const [adjPrices,setAdjPrices]=useState({});
-  const [adjCostos,setAdjCostos]=useState({});
+function Cotizador({precios:preciosListaProp,preciosBandas:preciosBandasProp,costos:costosProp,osde:osdeProp,mejoras:mejorasProp,onSaveQuote,knownEmpresas,apiKey,inicial,onAbierta}){
+  // Cotización abierta desde el historial: arranca con su estado y con sus precios y costos
+  const [ini]=useState(()=>leerCotizacion(inicial));
+  const e0=ini?.estado||{};
+  const [sub,setSub]=useState(ini?3:1);
+  const [emps,setEmps]=useState(ini?.emps||null);
+  const [map,setMap]=useState(ini?.emps?MAP_NOMINA:{titAge:"",spAge:"",ku:"",k25:"",planCol:"",zonaCol:""});
+  const [forcedZona,setForcedZona]=useState(e0.zona||null);
+  const [planMapping,setPlanMapping]=useState(e0.planMapping||{});
+  const [adjPrices,setAdjPrices]=useState(e0.adjPrices||{});
+  const [adjCostos,setAdjCostos]=useState(e0.adjCostos||{});
   // Ajuste de costos por plan cotizado: {adjKey:{pct, cats:{s0_25:$,...}}}. pct (decimal) va a
   // todos los rangos sobre el costo de lista; cats son montos por rango que se suman, como mejoras.
-  const [ajusteCostos,setAjusteCostos]=useState({});
-  const [adjPct,setAdjPct]=useState({}); // {adjKey: ajuste} — ver pctAjuste en calc.js; lo usa el Excel
-  const [empresa,setEmpresa]=useState("");
-  const [salidaCfg,setSalidaCfg]=useState({fecha:new Date().toISOString().split("T")[0],validez:"La propuesta tiene validez por un mes desde la fecha de presentación.",formato:"nchoice",textoExtra:"",masaSalarial:""});
+  const [ajusteCostos,setAjusteCostos]=useState(e0.ajusteCostos||{});
+  const [adjPct,setAdjPct]=useState(e0.adjPct||{}); // {adjKey: ajuste} — ver pctAjuste en calc.js; lo usa el Excel
+  const [empresa,setEmpresa]=useState(e0.empresa||"");
+  const [salidaCfg,setSalidaCfg]=useState(e0.salidaCfg||{fecha:new Date().toISOString().split("T")[0],validez:"La propuesta tiene validez por un mes desde la fecha de presentación.",formato:"nchoice",textoExtra:"",masaSalarial:""});
   const [chat,setChat]=useState([]);
   const [chatIn,setChatIn]=useState("");
   const [chatLoading,setCL]=useState(false);
@@ -114,19 +119,30 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   const [nomErrors,setNomErrors]=useState([]); // validación de nómina
   const [spouseWarning,setSpouseWarning]=useState(null); // advertencia cónyuges múltiples
   const [dupWarning,setDupWarning]=useState(null); // {items, rawRows, rawCols} — titulares duplicados
-  const [brokerPct,setBrokerPct]=useState(""); // comisión del broker (%)
-  const [planMappingOsde,setPlanMappingOsde]=useState({});
-  const [planMejoras,setPlanMejoras]=useState({});
-  const [planCustomNames,setPlanCustomNames]=useState({});
+  const [brokerPct,setBrokerPct]=useState(e0.brokerPct||""); // comisión del broker (%)
+  const [planMappingOsde,setPlanMappingOsde]=useState(e0.planMappingOsde||{});
+  const [planMejoras,setPlanMejoras]=useState(e0.planMejoras||{});
+  const [planCustomNames,setPlanCustomNames]=useState(e0.planCustomNames||{});
   // Tipo de propuesta: "equivalencia" (cada plan vigente → plan Omint equivalente)
   // o "simulacion" (toda la nómina cotizada en cada uno de los planes elegidos)
-  const [modo,setModo]=useState("equivalencia");
-  const [planesSim,setPlanesSim]=useState([]); // ids de planes cotizados (plan Omint u opción con mejoras)
+  const [modo,setModo]=useState(e0.modo||"equivalencia");
+  const [planesSim,setPlanesSim]=useState(e0.planesSim||[]); // ids de planes cotizados (plan Omint u opción con mejoras)
   // Copias de planes: el mismo plan Omint cotizado otra vez como un plan aparte (ej. 8500_PYME-2,
   // para cotizarlo con otras mejoras o ajustes). {id, planId, mejoras}
-  const [variantes,setVariantes]=useState([]);
+  const [variantes,setVariantes]=useState(e0.variantes||[]);
   const [planADuplicar,setPlanADuplicar]=useState("");
-  const [bandaForzada,setBandaForzada]=useState(""); // banda de cápitas elegida a mano ("" = automática)
+  const [bandaForzada,setBandaForzada]=useState(e0.bandaForzada||""); // banda de cápitas elegida a mano ("" = automática)
+  // Nómina tal como se subió (para guardarla con la cotización y poder bajarla de nuevo)
+  const [nominaOrigen,setNominaOrigen]=useState(ini?.nomina||null);
+  // Precios y costos con los que se guardó la cotización abierta (null = listas actuales)
+  const [listasFijas,setListasFijas]=useState(ini?.listas||null);
+  const preciosLista=listasFijas?listasFijas.precios:preciosListaProp;
+  const preciosBandas=listasFijas?{}:preciosBandasProp;
+  const costos=listasFijas?listasFijas.costos:costosProp;
+  const mejoras=listasFijas?listasFijas.mejoras:mejorasProp;
+  const osde=listasFijas?listasFijas.osde:osdeProp;
+  const [fechaAbierta]=useState(inicial?.fecha||null);
+  useEffect(()=>{if(inicial)onAbierta?.();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
@@ -149,7 +165,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
     setEmpresa("");setChat([]);setChatIn("");setSaveMsg("");setAiLog([]);setScenarios({});
     setNomErrors([]);setSpouseWarning(null);setDupWarning(null);setBrokerPct("");
     setPlanMappingOsde({});setPlanMejoras({});setPlanCustomNames({});setPlanesSim([]);setVariantes([]);
-    setPlanADuplicar("");setBandaForzada("");
+    setPlanADuplicar("");setBandaForzada("");setNominaOrigen(null);setListasFijas(null);
     setSalidaCfg(c=>({...c,fecha:new Date().toISOString().split("T")[0],textoExtra:"",masaSalarial:""}));
   }
 
@@ -221,6 +237,26 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   const multiSim=isSim&&planesSim.length>1;
 
   // Aplica un ajuste de precios (0-59/60+ o por rango) a un plan cotizado, sobre su precio de lista
+  // Cotización abierta del historial → pasar a las listas actuales. Los ajustes en % se vuelven a
+  // aplicar sobre los precios nuevos (con la banda de cápitas que corresponda).
+  function usarListasActuales(){
+    const objetivo=bandaForzada?(rangoBanda(bandaForzada)?.lo??capitas):capitas;
+    const precioActual=(z,pl)=>{
+      const bs=preciosBandasProp?.[z]?.[pl];const labels=Object.keys(bs||{});
+      return labels.length&&objetivo>0?bs[bandaPorCapitas(labels,objetivo)]:preciosListaProp?.[z]?.[pl];
+    };
+    setAdjPrices(prev=>{
+      const n={...prev};
+      Object.entries(adjPct).forEach(([k,adj])=>{
+        if(CAT_IDS.every(id=>!pctAjuste(adj,id)))return;
+        const [z,cotId]=k.split("||");
+        const base=precioActual(z,resolverCot(cotId)?.planId)||{};
+        n[k]=Object.fromEntries(CAT_IDS.map(id=>[id,Math.round((base[id]||0)*(1+pctAjuste(adj,id))*100)/100]));
+      });
+      return n;
+    });
+    setListasFijas(null);
+  }
   function aplicarAjuste(r,adj){
     const base=precios?.[r.zona]?.[r.planId]||{};
     const sinAjuste=CAT_IDS.every(id=>!pctAjuste(adj,id));
@@ -247,75 +283,11 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   // Una cotización es de una sola zona: todos los empleados se cotizan con sus planes y precios
   function getEmpZona(){return zonaCot;}
 
-  function buildGroups(){
-    if(!emps||!map.titAge||!map.ku)return[];
-    const gmap={};
-    if(isSim){
-      // Simulación: cada empleado entra en todos los planes elegidos, ignorando su plan vigente
-      emps.forEach(e=>{
-        const zona=getEmpZona(e);
-        planesSim.forEach(id=>{
-          const cot=resolverCot(id);
-          if(!cot)return;
-          const key=`${zona}||${cot.cotId}`;
-          if(!gmap[key])gmap[key]={zona,planVigente:cot.cotId,...cot,empList:[]};
-          gmap[key].empList.push(e);
-        });
-      });
-      return Object.values(gmap).sort((a,b)=>planTier(a.planId)-planTier(b.planId)||a.cotId.localeCompare(b.cotId)||a.zona.localeCompare(b.zona));
-    }
-    emps.forEach(e=>{
-      const zona=getEmpZona(e);
-      if(!map.planCol||!e[map.planCol])return;
-      const ext=String(e[map.planCol]).trim();
-      const cot=resolverCot(planMapping[ext]||(isOmintPlan(ext)?ext:null));
-      if(!cot)return;
-      // Agrupar por plan VIGENTE: cada plan original tiene su propia distribución
-      const planVigente=ext;
-      const key=`${zona}||${planVigente}`;
-      if(!gmap[key])gmap[key]={zona,planVigente,...cot,empList:[]};
-      gmap[key].empList.push(e);
-    });
-    return Object.values(gmap).sort((a,b)=>a.zona.localeCompare(b.zona)||planTier(a.planId)-planTier(b.planId)||a.cotId.localeCompare(b.cotId));
-  }
-
-  function buildResults(){
-    const brokerMult=1+(parseFloat(brokerPct)||0)/100;
-    return buildGroups().map(({zona,planId,cotId,planVigente,empList})=>{
-      // adjKey por plan COTIZADO (plan Omint u opción con mejoras): ajustes, mejoras y nombres
-      // van por opción; precios y costos base salen del plan Omint (planId)
-      const adjKey=`${zona}||${cotId}`;
-      const basePrices=precios?.[zona]?.[planId]||{};
-      const adjP=adjPrices[adjKey]||{};
-      const effPrices=Object.fromEntries(CAT_IDS.map(c=>[c,adjP[c]!==undefined?adjP[c]:basePrices[c]||0]));
-      const baseCostos=costos?.[planDeCosto(costos,planId)]||{};
-      const adjC=adjCostos[adjKey]||{};
-      const ajC=ajusteCostos[adjKey]||{};
-      // Mejoras: las elegidas a mano para esta opción o, si no, las fijas de la opción
-      const mejSel=planMejoras[adjKey]||varPorId[cotId]?.mejoras||{};
-      const effCostos=Object.fromEntries(CAT_IDS.map(c=>{
-        const base=adjC[c]!==undefined?adjC[c]:baseCostos[c]||0;
-        let mejCost=0;
-        MEJORAS_DEF.forEach(m=>{
-          const optKey=mejSel[m.id];
-          if(!optKey)return;
-          const opt=(mejoras||{})[m.id]?.[optKey];
-          if(opt==null)return;
-          mejCost+=m.type==="pmpm"?(typeof opt==="number"?opt:0):(opt[c]||0);
-        });
-        return[c,(base*(1+(ajC.pct||0))+(ajC.cats?.[c]||0)+mejCost)*brokerMult];
-      }));
-      const bd=calcBD(empList,map,effPrices,effCostos);
-      // baseCostosXLS: costo sin mejoras ni comisión (para que Excel pueda desglosar correctamente)
-      const baseCostosXLS=Object.fromEntries(CAT_IDS.map(c=>[c,adjC[c]!==undefined?adjC[c]:baseCostos[c]||0]));
-      // basePreciosXLS: precio original sin ajuste IA (para que Excel aplique la fórmula *(1+adj) sin doble ajuste)
-      const basePreciosXLS=Object.fromEntries(CAT_IDS.map(c=>[c,basePrices[c]||0]));
-      // osdeKey: clave para comparación OSDE (por plan vigente, no por plan Omint)
-      const osdeKey=`${zona}||${planVigente}`;
-      const sinPrecios=Object.keys(basePrices).length===0;
-      return{zona,planId,cotId,mejSel,planVigente,empList,bd,adjKey,osdeKey,sim:isSim,sinPrecios,ajC,baseCostosXLS,basePreciosXLS};
-    });
-  }
+  // Estado de la cotización que necesita el cálculo (ver cotizacion.js)
+  const estadoCalculo={emps,map,modo,zona:zonaCot,planesSim,variantes,planMapping,adjPrices,adjCostos,ajusteCostos,planMejoras,brokerPct};
+  const listasCalculo={precios,costos,mejoras};
+  const buildGroups=()=>construirGrupos(estadoCalculo,listasCalculo);
+  const buildResults=()=>construirResultados(estadoCalculo,listasCalculo);
 
   const results=sub===3||sub==="salidas"?buildResults():[];
   const grandFac=results.reduce((a,r)=>a+r.bd.totalFac,0);
@@ -344,6 +316,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
         if(!raw||raw.length===0){setNomErrors([{tipo:"error",msg:"El archivo está vacío."}]);return;}
         const rawCols=Object.keys(raw[0]);
         const result=parseNominaFija(raw,rawCols);
+        if(!result.error)setNominaOrigen({nombre:f.name,rows:raw,cols:rawCols,resoluciones:null});
         if(result.error){
           setNomErrors([{tipo:"error",msg:result.error}]);
           setEmps(null);return;
@@ -366,7 +339,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   function applyParsedResult(result){
         setBandaForzada("");
         setEmps(result.rows);
-        setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
+        setMap(MAP_NOMINA);
         const info=`✓ ${result.rows.length} familias cargadas (${result.totalRaw} filas procesadas${result.filasIgnoradas>0?`, ${result.filasIgnoradas} ignoradas`:""})`;
         const warns=[];
         if(result.hijosEdadInvalida&&result.hijosEdadInvalida.length>0){
@@ -383,6 +356,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
     // Re-parsear el archivo con las resoluciones elegidas por el usuario
     if(!dupWarning)return;
     const result=parseNominaFija(dupWarning.rawRows,dupWarning.rawCols,resoluciones);
+    setNominaOrigen(o=>o&&{...o,resoluciones});
     setDupWarning(null);
     if(result.error){setNomErrors([{tipo:"error",msg:result.error}]);setEmps(null);return;}
     applyParsedResult(result);
@@ -505,6 +479,14 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       modo,socios:emps?.length||0,bandaPrecios:bandaUsada||null,
       adjPrices:{...adjPrices},adjCostos:{...adjCostos},ajusteCostos:{...ajusteCostos},
       aiLog:[...aiLog],snapshot,
+      fechaPropuesta:salidaCfg.fecha||null,
+      // Todo lo necesario para reabrirla y regenerar sus archivos (ver cotizacionGuardada.js)
+      datos:JSON.stringify({version:1,
+        estado:{empresa,modo,zona:zonaCot,planesSim,variantes,planMapping,planCustomNames,planMappingOsde,planMejoras,
+          adjPrices,adjPct,adjCostos,ajusteCostos,brokerPct,bandaForzada,salidaCfg},
+        listas:{precios:{[zonaCot]:precios?.[zonaCot]||{}},costos:costos||{},mejoras:mejoras||{},osde:osde||{}},
+        nomina:nominaOrigen,
+        ...(nominaOrigen?{}:{emps})}),
     });
     setSaveMsg(status==="cerrado"?"✓ Guardado como cerrado":"✓ Guardado como abierto");
     setTimeout(()=>setSaveMsg(""),2500);
@@ -708,6 +690,10 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     </div>)}
 
     {/* STEP 3: PLANILLA DE COTIZACIÓN */}
+    {listasFijas&&(sub===3||sub==="salidas")&&<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:10,padding:"10px 14px",marginBottom:12,borderRadius:10,background:"#EFF6FF",border:"1px solid #BFDBFE",fontSize:13,color:"#1E3A8A",fontFamily:FONT,textAlign:"left"}}>
+      <span style={{flex:"1 1 320px"}}>Cotización abierta del historial{fechaAbierta?` (guardada el ${new Date(fechaAbierta).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})})`:""}, con los precios y costos de ese momento. Si la guardás, queda como una cotización nueva.</span>
+      <button onClick={usarListasActuales} style={{...btnS,fontSize:12}}>Usar precios y costos actuales</button>
+    </div>}
     {sub===3&&<Planilla banda={banda}
       results={results} isSim={isSim} multiSim={multiSim} simTotals={simTotals} emps={emps}
       grandFac={grandFac} grandCosto={grandCosto} grandCF={grandCF} inversions={inversions}

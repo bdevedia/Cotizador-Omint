@@ -1,6 +1,6 @@
 import { FONT, BLUE, BLUE_LT, BORDER, ZONA_COLORS } from "../constants";
 import { badge, btnP, btnS, inp, card } from "../styles";
-import { generateProposalHTML } from "../exportHTML";
+import { generateProposalHTML, abrirPropuestaPDF } from "../exportHTML";
 import { exportNominaValorizadaXLS } from "../exportNominaValorizada";
 import { exportAnalisisXLS } from "../exportXLS";
 
@@ -35,19 +35,7 @@ function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,plan
   {const vistos=new Set();results.forEach(r=>{if(!vistos.has(r.adjKey)){vistos.add(r.adjKey);planes.push(r);}});}
   const multiZona=new Set(results.map(r=>r.zona)).size>1;
 
-  function descargarPDF(){
-    const blob=new Blob([html],{type:"text/html;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const w=window.open(url,"_blank");
-    if(w){
-      // Esperar a que carguen las fuentes de la propuesta antes de imprimir
-      w.addEventListener("load",()=>{
-        const imprimir=()=>setTimeout(()=>w.print(),300);
-        (w.document.fonts?.ready||Promise.resolve()).then(imprimir,imprimir);
-      });
-    }
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
-  }
+  const descargarPDF=()=>abrirPropuestaPDF(html);
   function descargarExcel(){
     try{exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,cfg.masaSalarial,mejoras,planesNombres,adjPct,listas);}
     catch(e){alert("Error al exportar el Excel: "+e.message);}

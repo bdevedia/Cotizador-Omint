@@ -1,10 +1,16 @@
 import { useState, Fragment } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER, GRAY } from "../constants";
-import { fmt, fmtD, cfColor, cfBg } from "../utils";
+import { fmt, cfColor, cfBg } from "../utils";
 import { badge, card, TH, TD } from "../styles";
+import { leerCotizacion, descargarPDFGuardado, descargarExcelGuardado, descargarValorizadaGuardada, descargarNominaOriginal } from "../cotizacionGuardada";
+
+const fechaHora=f=>new Date(f).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+// "2026-10-15" → "15/10/2026" (sin pasar por Date, para que no corra un día por la zona horaria)
+const fechaCorta=f=>{const m=String(f||"").match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}/${m[1]}`:"—";};
+function descargar(fn,q){try{fn(q);}catch(e){alert(e.message);}}
 
 // ── HISTORIAL ─────────────────────────────────────────────────────────────────
-function Historial({quotes,onUpdate,onDelete,onRenameEmpresa}){
+function Historial({quotes,onUpdate,onDelete,onRenameEmpresa,onAbrir}){
   const [open,setOpen]=useState({});
   const [expandedSnaps,setExpandedSnaps]=useState({});
   const [renamingEmpresa,setRenamingEmpresa]=useState(null); // empresa name being renamed
@@ -80,14 +86,16 @@ function Historial({quotes,onUpdate,onDelete,onRenameEmpresa}){
             {/* Cotizaciones table */}
             {isOpen&&<div>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                <thead><tr>{["Fecha","Socios","Facturación","Costo","C/F","Estado",""].map((h,i)=><th key={h+i} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
+                <thead><tr>{["Guardada","Propuesta","Socios","Facturación","Costo","C/F","Estado",""].map((h,i)=><th key={h+i} style={TH({textAlign:i===0?"left":"right"})}>{h}</th>)}</tr></thead>
                 <tbody>{list.map(q=>{
                   const cf=q.cfTotal||0;
                   const sims=q.simulaciones?.length>1?q.simulaciones:null; // simulación de varios planes: sin total único
                   const expSnap=!!expandedSnaps[q.id];
+                  const conDatos=!!q.datos;
                   return(<Fragment key={q.id}>
                     <tr>
-                      <td style={TD({})}>{fmtD(q.fecha)}</td>
+                      <td style={TD({whiteSpace:"nowrap"})}>{fechaHora(q.fecha)}</td>
+                      <td style={TD({textAlign:"right",whiteSpace:"nowrap",color:"#4B5563"})}>{q.fechaPropuesta?fechaCorta(q.fechaPropuesta):"—"}</td>
                       <td style={TD({textAlign:"right",color:"#6B7280"})}>{q.socios||"—"}</td>
                       <td style={TD({textAlign:"right",fontWeight:600,color:BLUE})}>{sims?<span style={{fontSize:12}}>{sims.length} planes simulados</span>:`$${fmt(q.totalFac||q.total)}`}</td>
                       <td style={TD({textAlign:"right",color:"#DC2626"})}>{sims?"—":`$${fmt(q.totalCosto||0)}`}</td>
@@ -95,13 +103,20 @@ function Historial({quotes,onUpdate,onDelete,onRenameEmpresa}){
                       <td style={TD({textAlign:"right"})}><span style={badge(q.status==="cerrado"?"#065F46":"#92400E",q.status==="cerrado"?"#D1FAE5":"#FEF3C7")}>{q.status==="cerrado"?"Cerrado":"Abierto"}</span></td>
                       <td style={TD({textAlign:"right"})}>
                         <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
-                          {q.snapshot&&<button onClick={()=>toggleSnap(q.id)} style={{fontSize:11,padding:"4px 8px",border:`1px solid ${BORDER}`,borderRadius:6,cursor:"pointer",background:"#fff",color:"#374151",fontFamily:FONT}}>{expSnap?"▲":"▼"}</button>}
+                          {conDatos&&onAbrir&&<button onClick={()=>onAbrir(q)} title="Abrir en el cotizador para seguir editándola" style={{fontSize:11,padding:"4px 10px",border:`1px solid ${BLUE}`,borderRadius:6,cursor:"pointer",background:BLUE,color:"#fff",fontWeight:600,fontFamily:FONT}}>Abrir</button>}
+                          {(q.snapshot||conDatos)&&<button onClick={()=>toggleSnap(q.id)} style={{fontSize:11,padding:"4px 8px",border:`1px solid ${BORDER}`,borderRadius:6,cursor:"pointer",background:"#fff",color:"#374151",fontFamily:FONT}}>{expSnap?"▲":"▼"}</button>}
                           {q.status==="abierto"&&onUpdate&&<button onClick={()=>onUpdate(q.id,{status:"cerrado"})} style={{fontSize:11,padding:"4px 10px",border:`1px solid ${BORDER}`,borderRadius:6,cursor:"pointer",background:"#fff",color:BLUE,fontWeight:500,fontFamily:FONT}}>Cerrar</button>}
                           <button onClick={()=>handleDeleteQuote(q.id)} title="Eliminar cotización" style={{fontSize:11,padding:"4px 8px",border:"1px solid #FCA5A5",borderRadius:6,cursor:"pointer",background:"#fff",color:"#DC2626",fontFamily:FONT}}>🗑</button>
                         </div>
                       </td>
                     </tr>
-                    {expSnap&&q.snapshot&&<tr><td colSpan={7} style={{padding:"8px 16px",background:GRAY,borderBottom:`1px solid ${BORDER}`}}>
+                    {expSnap&&(q.snapshot||conDatos)&&<tr><td colSpan={8} style={{padding:"8px 16px",background:GRAY,borderBottom:`1px solid ${BORDER}`}}>
+                      {conDatos?<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,marginBottom:10}}>
+                        <span style={{fontSize:11,fontWeight:600,color:"#374151",fontFamily:FONT}}>Archivos:</span>
+                        {[["Propuesta PDF",descargarPDFGuardado],["Excel de análisis",descargarExcelGuardado],["Nómina valorizada",descargarValorizadaGuardada],["Nómina original",descargarNominaOriginal]].map(([l,fn])=>
+                          <button key={l} onClick={()=>descargar(fn,q)} style={{fontSize:11,padding:"5px 10px",border:`1px solid ${BORDER}`,borderRadius:6,cursor:"pointer",background:"#fff",color:BLUE,fontWeight:600,fontFamily:FONT}}>↓ {l}</button>)}
+                        {(()=>{const d=leerCotizacion(q);return d?.nomina?.nombre&&<span style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>· {d.nomina.nombre}</span>;})()}
+                      </div>:<p style={{fontSize:11,color:"#6B7280",fontFamily:FONT,marginBottom:8}}>Guardada antes de que el historial guardara los archivos: solo están los totales.</p>}
                       {sims&&<div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:10}}>
                         {sims.map(t=><div key={t.planId} style={{padding:"8px 12px",background:BLUE_LT,borderRadius:8,border:`1px solid ${BORDER}`,minWidth:180}}>
                           <p style={{fontSize:11,fontWeight:700,color:BLUE,fontFamily:FONT,marginBottom:4}}>Simulación {t.planId}</p>
@@ -110,7 +125,7 @@ function Historial({quotes,onUpdate,onDelete,onRenameEmpresa}){
                       </div>}
                       <div style={{fontSize:11,fontFamily:FONT,color:"#374151",marginBottom:6,fontWeight:600}}>Detalle de precios cotizados:</div>
                       <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-                        {q.snapshot.map((s,si)=><div key={si} style={{padding:"8px 12px",background:"#fff",borderRadius:8,border:`1px solid ${BORDER}`,minWidth:180}}>
+                        {(q.snapshot||[]).map((s,si)=><div key={si} style={{padding:"8px 12px",background:"#fff",borderRadius:8,border:`1px solid ${BORDER}`,minWidth:180}}>
                           <p style={{fontSize:11,fontWeight:700,color:BLUE,fontFamily:FONT,marginBottom:4}}>{s.zona} · {s.planId}</p>
                           <p style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>{s.socios} socios · C/F {s.cf?.toFixed(1)}%</p>
                           <p style={{fontSize:11,color:BLUE,fontFamily:FONT}}>Fac: ${fmt(s.fac)}</p>
