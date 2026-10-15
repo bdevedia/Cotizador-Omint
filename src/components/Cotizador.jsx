@@ -102,6 +102,9 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   const [planMapping,setPlanMapping]=useState({});
   const [adjPrices,setAdjPrices]=useState({});
   const [adjCostos,setAdjCostos]=useState({});
+  // Ajuste de costos por plan cotizado: {adjKey:{pct, cats:{s0_25:$,...}}}. pct (decimal) va a
+  // todos los rangos sobre el costo de lista; cats son montos por rango que se suman, como mejoras.
+  const [ajusteCostos,setAjusteCostos]=useState({});
   const [adjPct,setAdjPct]=useState({}); // {adjKey: ajuste} — ver pctAjuste en calc.js; lo usa el Excel
   const [empresa,setEmpresa]=useState("");
   const [salidaCfg,setSalidaCfg]=useState({fecha:new Date().toISOString().split("T")[0],validez:"La propuesta tiene validez por un mes desde la fecha de presentación.",formato:"nchoice",textoExtra:"",masaSalarial:""});
@@ -160,7 +163,16 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   const needsMapeo=externalPlans.some(p=>!isOmintPlan(p));
   // El paso 2 se muestra siempre que haya planes en la nómina: ahí también se arman las opciones con mejoras
   const pasoPlanes=modo==="simulacion"||externalPlans.length>0;
-  const allOmintPlans=[...new Set(ZONA_IDS.flatMap(z=>Object.keys(precios?.[z]||{})))].sort((a,b)=>planTier(a)-planTier(b)||a.localeCompare(b));
+  // Solo se ofrecen planes que se venden (tienen precio) en las zonas de la nómina
+  const zonasNomina=emps?[...new Set(emps.map(getEmpZona))]:[];
+  const zonasOferta=zonasNomina.length?zonasNomina:ZONA_IDS;
+  const ordenPlan=(a,b)=>planTier(a)-planTier(b)||a.localeCompare(b);
+  const allOmintPlans=[...new Set(zonasOferta.flatMap(z=>Object.keys(precios?.[z]||{})))].sort(ordenPlan);
+  // Para el mapeo: planes con precio en todas las zonas donde está ese plan vigente
+  function opcionesParaVigente(ext){
+    const zs=[...new Set(emps.filter(e=>e[map.planCol]===ext).map(getEmpZona))];
+    return opcionesCot.filter(id=>{const base=resolverCot(id).planId;return zs.every(z=>precios?.[z]?.[base]);});
+  }
   const isSim=modo==="simulacion";
   const varPorId=Object.fromEntries(variantes.map(v=>[v.id,v]));
   // Planes que se pueden elegir al mapear o simular: planes Omint + opciones con mejoras
@@ -262,6 +274,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
       const effPrices=Object.fromEntries(CAT_IDS.map(c=>[c,adjP[c]!==undefined?adjP[c]:basePrices[c]||0]));
       const baseCostos=costos?.[planId]||{};
       const adjC=adjCostos[adjKey]||{};
+      const ajC=ajusteCostos[adjKey]||{};
       // Mejoras: las elegidas a mano para esta opción o, si no, las fijas de la opción
       const mejSel=planMejoras[adjKey]||varPorId[cotId]?.mejoras||{};
       const effCostos=Object.fromEntries(CAT_IDS.map(c=>{
@@ -274,7 +287,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
           if(opt==null)return;
           mejCost+=m.type==="pmpm"?(typeof opt==="number"?opt:0):(opt[c]||0);
         });
-        return[c,(base+mejCost)*brokerMult];
+        return[c,(base*(1+(ajC.pct||0))+(ajC.cats?.[c]||0)+mejCost)*brokerMult];
       }));
       const bd=calcBD(empList,map,effPrices,effCostos);
       // mapping: plan vigente → plan Omint (si son distintos)
@@ -286,7 +299,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
       // osdeKey: clave para comparación OSDE (por plan vigente, no por plan Omint)
       const osdeKey=`${zona}||${planVigente}`;
       const sinPrecios=Object.keys(basePrices).length===0;
-      return{zona,planId,cotId,mejSel,planVigente,empList,bd,mapping,adjKey,osdeKey,sim:isSim,sinPrecios,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0,baseCostosXLS,basePreciosXLS};
+      return{zona,planId,cotId,mejSel,planVigente,empList,bd,mapping,adjKey,osdeKey,sim:isSim,sinPrecios,ajC,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0,baseCostosXLS,basePreciosXLS};
     });
   }
 
@@ -476,7 +489,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           simulaciones:simTotals.map(({cotId,fac,costo,cf})=>({planId:cotId,fac,costo,cf}))}
         :{total:grandFac,totalFac:grandFac,totalCosto:grandCosto,cfTotal:grandCF}),
       modo,socios:emps?.length||0,bandaPrecios:bandaUsada||null,
-      adjPrices:{...adjPrices},adjCostos:{...adjCostos},
+      adjPrices:{...adjPrices},adjCostos:{...adjCostos},ajusteCostos:{...ajusteCostos},
       aiLog:[...aiLog],snapshot,
     });
     setSaveMsg(status==="cerrado"?"✓ Guardado como cerrado":"✓ Guardado como abierto");
@@ -602,7 +615,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
             {opcionesCot.map(id=>{
               const sel=planesSim.includes(id);
               const base=resolverCot(id).planId;
-              const zonasConPrecio=ZONA_IDS.filter(z=>precios?.[z]?.[base]);
+              const zonasConPrecio=zonasOferta.filter(z=>precios?.[z]?.[base]);
               return(<label key={id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:8,cursor:"pointer",fontFamily:FONT,fontSize:13,
                 border:`1.5px solid ${sel?BLUE:BORDER}`,background:sel?BLUE_LT:"#fff",color:sel?BLUE:"#374151",fontWeight:sel?700:500}}>
                 <input type="checkbox" checked={sel} onChange={()=>setPlanesSim(prev=>sel?prev.filter(p=>p!==id):[...prev,id])}/>
@@ -646,13 +659,16 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
             <thead><tr><th style={TH({textAlign:"left"})}>Plan en la nómina</th><th style={TH({textAlign:"right"})}>Empleados</th><th style={TH({textAlign:"left"})}>Mapear a plan Omint</th></tr></thead>
             <tbody>{externalPlans.map(ext=>{
               const count=emps.filter(e=>e[map.planCol]===ext).length,alreadyOmint=isOmintPlan(ext);
+              const actual=planMapping[ext]||(alreadyOmint?ext:"");
+              const ops=opcionesParaVigente(ext);
               return(<tr key={ext}>
                 <td style={TD({fontWeight:500})}>{ext}{alreadyOmint&&<span style={{...badge(BLUE,BLUE_LT),marginLeft:8,fontSize:10}}>Omint</span>}</td>
                 <td style={TD({textAlign:"right",color:"#6B7280"})}>{count}</td>
                 <td style={TD()}>
                   <select value={planMapping[ext]||(alreadyOmint?ext:"")} onChange={e=>setPlanMapping(p=>({...p,[ext]:e.target.value}))} style={{...inp,width:230}}>
                     {!alreadyOmint&&<option value="">No cotizar</option>}
-                    {opcionesCot.map(id=><option key={id} value={id}>{id}</option>)}
+                    {ops.map(id=><option key={id} value={id}>{id}</option>)}
+                    {actual&&!ops.includes(actual)&&<option value={actual}>{actual} (sin precio en la zona)</option>}
                   </select>
                 </td>
               </tr>);
@@ -689,7 +705,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       results={results} isSim={isSim} multiSim={multiSim} simTotals={simTotals} emps={emps}
       grandFac={grandFac} grandCosto={grandCosto} grandCF={grandCF} inversions={inversions}
       precios={precios} mejoras={mejoras} osde={osde}
-      adjPct={adjPct} adjPrices={adjPrices} adjCostos={adjCostos} setAdjCostos={setAdjCostos}
+      adjPct={adjPct} adjPrices={adjPrices} adjCostos={adjCostos} setAdjCostos={setAdjCostos} ajusteCostos={ajusteCostos} setAjusteCostos={setAjusteCostos}
       aplicarAjuste={aplicarAjuste} setPrecioManual={setPrecioManual}
       setPlanMejoras={setPlanMejoras}
       planCustomNames={planCustomNames}

@@ -457,6 +457,31 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
 
     row++;
 
+    // ── SECCIÓN 5b: Ajuste de costos (solo si algún plan tiene) ────────────────
+    // % a todos los rangos sobre el costo de lista y/o $ por rango que se suman
+    const ajusteRowMap={};
+    const hayAjCosto=uniqueOmint.some(res=>res.ajC&&(res.ajC.pct||CAT_KEYS.some(k=>k&&res.ajC.cats?.[k])));
+    if(hayAjCosto){
+      p(0,row,"Ajuste de costos",fWHITE,FILL_MED_TEAL,aC,BORDER_ALL);
+      merge(0,row,11,row); row++;
+      ["00 - 25","26 - 35","36 - 54","55 - 59","60 +"].forEach((h,i)=>p(i+1,row,h,fBOLD,null,aC,BORDER_ALL));
+      p(7,row,"Hijo 1",fBOLD,null,aC,BORDER_ALL);
+      p(8,row,"Hijo 2 o +",fBOLD,null,aC,BORDER_ALL);
+      p(9,row,"% todos",fBOLD,null,aC,BORDER_ALL);
+      row++;
+      uniqueOmint.forEach((res,pi)=>{
+        ajusteRowMap[res.cotId]=row;
+        p(0,row,planLabel(res),fBOLD,planFill(pi),aC,BORDER_ALL);
+        [1,2,3,4,5,7,8].forEach(ci=>{
+          const v=res.ajC?.cats?.[CAT_KEYS[CAT_COLS.indexOf(ci)]]||0;
+          p(ci,row,v,fNorm,v?null:FILL_LIGHTBLUE,aC,BORDER_ALL,NF_MONEY);
+        });
+        p(9,row,res.ajC?.pct||0,fNorm,res.ajC?.pct?null:FILL_LIGHTBLUE,aC,BORDER_ALL,NF_PCT1);
+        row++;
+      });
+      row++;
+    }
+
     // ── SECCIÓN 6: Costos totales ─────────────────────────────────────────────
     p(0,row,"Costos totales",fWHITE,FILL_DARK_HEADER,aC,BORDER_ALL);
     merge(0,row,11,row); row++;
@@ -486,11 +511,13 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
       const brokerFactor=`(1+${brokerCellRef})`;
-      // Each cat = (costoEE + mejora) × (1 + comisión)
+      // Cada rango = (costoEE × (1 + % ajuste) + $ ajuste + mejora) × (1 + comisión)
+      const ajr=ajusteRowMap[res.cotId];
       [1,2,3,4,5,7,8].forEach(ci=>{
         const key=CAT_KEYS[CAT_COLS.indexOf(ci)];
-        const baseVal=+(getC(key||"s0_25")||0).toFixed(0);
-        pF(ci,row,`(${ea(ci,eer)}+${ea(ci,mer)})*${brokerFactor}`,baseVal,fNorm,null,aC,BORDER_ALL,NF_MONEY);
+        const baseVal=+(res.bd.rows.find(x=>x.id===key)?.costo||getC(key||"s0_25")||0).toFixed(0);
+        const ee=ajr!=null?`${ea(ci,eer)}*(1+${ea(9,ajr)})+${ea(ci,ajr)}`:ea(ci,eer);
+        pF(ci,row,`(${ee}+${ea(ci,mer)})*${brokerFactor}`,baseVal,fNorm,null,aC,BORDER_ALL,NF_MONEY);
       });
       // J/K/L placeholder — se sobreescribe con SUMPRODUCT luego del loop (mismo patrón que C/F)
       p(9,row,0,fNorm,null,aC,BORDER_ALL,NF_MONEY);

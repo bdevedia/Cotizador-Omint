@@ -63,4 +63,5 @@ function AjustePrecios({adj,onChange}){
   </div>);
 }
 
+export { PctInput };
 export default AjustePrecios;
