@@ -7,7 +7,7 @@ import { FONT, BLUE, BLUE_LT, BORDER, GRAY,
 import { fmt, planTier } from "../utils";
 import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
-import { calcBD, pctAjuste, checkPriceInversions, bandaPorCapitas, ordenarBandas } from "../calc";
+import { calcBD, pctAjuste, checkPriceInversions, bandaPorCapitas, ordenarBandas, rangoBanda } from "../calc";
 import Salidas from "./Salidas";
 import NominaResumen from "./NominaResumen";
 import PlanesPropuesta from "./PlanesPropuesta";
@@ -137,10 +137,23 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   const bandasDisp=ordenarBandas([...new Set(Object.values(preciosBandas||{}).flatMap(z=>Object.values(z||{}).flatMap(b=>Object.keys(b||{}))))]);
   const bandaAuto=bandasDisp.length&&capitas>0?bandaPorCapitas(bandasDisp,capitas):"";
   const bandaUsada=bandasDisp.includes(bandaForzada)?bandaForzada:bandaAuto;
-  // Precios de la banda elegida; si un plan no la tiene, el de la lista (banda 200-499)
+  // Cada plan toma la banda entre las suyas: los PYME no tienen "1 a 10", así que con pocas
+  // cápitas usan su primera banda ("11 a 99"). Sin bandas, el precio de la lista (200-499).
+  const capitasBanda=bandaForzada&&bandasDisp.includes(bandaForzada)?(rangoBanda(bandaForzada)?.lo??capitas):capitas;
   const precios=bandaUsada?Object.fromEntries(Object.entries(preciosLista||{}).map(([z,planes])=>[z,
-    Object.fromEntries(Object.entries(planes||{}).map(([pl,cats])=>[pl,preciosBandas?.[z]?.[pl]?.[bandaUsada]||cats]))])):preciosLista;
-  const banda={capitas,disponibles:bandasDisp,auto:bandaAuto,usada:bandaUsada,forzada:bandasDisp.includes(bandaForzada)?bandaForzada:"",setForzada:setBandaForzada};
+    Object.fromEntries(Object.entries(planes||{}).map(([pl,cats])=>{
+      const bs=preciosBandas?.[z]?.[pl];
+      const labels=Object.keys(bs||{});
+      return[pl,labels.length?bs[bandaPorCapitas(labels,capitasBanda)]:cats];
+    }))])):preciosLista;
+  // Planes que no tienen la banda general y usan otra (ej. PYME con 10 cápitas o menos)
+  const otraBanda={};
+  if(bandaUsada)Object.values(preciosBandas||{}).forEach(planes=>Object.entries(planes||{}).forEach(([pl,bs])=>{
+    const labels=Object.keys(bs||{});
+    const l=labels.length?bandaPorCapitas(labels,capitasBanda):null;
+    if(l&&l!==bandaUsada)otraBanda[pl]=l;
+  }));
+  const banda={capitas,disponibles:bandasDisp,auto:bandaAuto,usada:bandaUsada,forzada:bandasDisp.includes(bandaForzada)?bandaForzada:"",setForzada:setBandaForzada,otraBanda};
 
   const isOmintPlan=p=>Object.values(precios||{}).some(z=>z[p]);
   const externalPlans=emps&&map.planCol?[...new Set(emps.map(e=>e[map.planCol]).filter(Boolean))]:[];
