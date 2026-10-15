@@ -23,7 +23,7 @@ const A4_W=794,A4_H=1123,ESCALA=0.7;
 
 const lbl={fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT};
 
-function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,planMappingOsde,planMejoras,mejoras,
+function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,planMappingOsde,mejoras,
   planCustomNames,setPlanCustomNames,adjPct,listas,guardar,saveMsg,onVolver}){
   const upd=(k,v)=>setCfg(p=>({...p,[k]:v}));
   const planesNombres=Object.fromEntries(results.map(r=>[r.adjKey,planCustomNames[r.adjKey]||r.cotId]));
@@ -49,7 +49,7 @@ function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,plan
     setTimeout(()=>URL.revokeObjectURL(url),60000);
   }
   function descargarExcel(){
-    try{exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,cfg.masaSalarial,mejoras,planMejoras,planesNombres,adjPct,listas);}
+    try{exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,cfg.masaSalarial,mejoras,planesNombres,adjPct,listas);}
     catch(e){alert("Error al exportar el Excel: "+e.message);}
   }
   function descargarValorizada(){

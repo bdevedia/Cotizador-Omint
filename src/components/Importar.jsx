@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FONT, BLUE, BLUE_LT, BORDER } from "../constants";
+import { FONT, BLUE, BLUE_LT } from "../constants";
 import { btnS, card } from "../styles";
 import { parsePreciosFile, parseCostosFile } from "../parsers";
 import { ordenarBandas } from "../calc";
@@ -41,6 +41,5 @@ function Importar({onPreciosImport,onCostosImport}){
     </div>
   </div>);
 }
-
 
 export default Importar;

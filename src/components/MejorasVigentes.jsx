@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { FONT, BLUE, BLUE_LT, BORDER, GRAY, CATS, CAT_IDS, MEJORAS_DEF, EMPTY_MEJORAS } from "../constants";
-import { btnP, btnS, inp, card, TH, TD } from "../styles";
+import { FONT, BORDER, GRAY, CATS, CAT_IDS, MEJORAS_DEF, EMPTY_MEJORAS } from "../constants";
+import { btnP, btnS, inp, card } from "../styles";
 
 // ── MEJORAS VIGENTES ──────────────────────────────────────────────────────────
 function mejorasToLoc(mejoras){
@@ -136,6 +136,5 @@ function MejorasVigentes({mejoras,onSave}){
     </div>
   </div>);
 }
-
 
 export default MejorasVigentes;

@@ -33,10 +33,11 @@ function generateProposalHTML(cfg,results){
   const {empresa,fecha,validez,formato,planesNombres,textoExtra}=cfg;
   const capitados=formato==="capitados"||formato==="capitados2";
 
-  // Deduplicar por plan cotizado (cotId) — igual que Excel: precios únicos por plan cotizado
+  // Un renglón por plan cotizado y zona (adjKey): con varias zonas cada una tiene sus precios
   const seen=new Set();
-  const planes=results.filter(r=>{if(seen.has(r.cotId))return false;seen.add(r.cotId);return true;});
-  const nombre=r=>(planesNombres||{})[r.adjKey]||r.cotId;
+  const planes=results.filter(r=>{if(seen.has(r.adjKey))return false;seen.add(r.adjKey);return true;});
+  const multiZona=new Set(planes.map(r=>r.zona)).size>1;
+  const nombre=r=>((planesNombres||{})[r.adjKey]||r.cotId)+(multiZona?` · ${r.zona}`:"");
 
   let tabla;
   if(formato==="capitados2"){

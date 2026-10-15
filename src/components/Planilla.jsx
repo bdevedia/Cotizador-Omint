@@ -1,5 +1,5 @@
 import { useState, Fragment } from "react";
-import { FONT, BLUE, BLUE_LT, BORDER, GRAY, CATS, CAT_IDS, ZONA_COLORS, MEJORAS_DEF } from "../constants";
+import { FONT, BLUE, BLUE_LT, BORDER, GRAY, CATS, CAT_IDS, ZONA_COLORS, MEJORAS_DEF, RANGO } from "../constants";
 import { cfColor, cfBg, fmt } from "../utils";
 import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 import { pctAjuste, capitado059, calcOsdeFromEmps, planOsdeDe } from "../calc";
@@ -10,7 +10,6 @@ import AjustePrecios, { PctInput } from "./AjustePrecios";
 // con todos los planes en filas para compararlos. Herramientas (IA, escenarios, alertas)
 // en un panel lateral.
 
-const RANGO={s0_25:"00-25",s26_34:"26-35",s35_54:"36-54",s55_59:"55-59",s60plus:"60+",h1:"Hijo 1",h2plus:"Hijo 2+"};
 const HEAD_SECCION={margin:0,padding:"10px 16px",fontSize:13,fontWeight:700,color:"#fff",background:"#17375E",fontFamily:FONT,letterSpacing:"0.02em"};
 const fmt0=n=>Math.round(+n||0).toLocaleString("es-AR");
 const fmtPct=v=>`${v>0?"+":v<0?"−":""}${Math.abs(Math.round(v*1000)/10).toString().replace(".",",")}%`;
@@ -126,7 +125,7 @@ function Planilla(props){
         {hayAjustes&&<button onClick={()=>{setAdjPrices({});setAdjPct({});setAdjCostos({});setAjusteCostos({});}} style={btnS}>↺ Resetear ajustes</button>}
         <button onClick={()=>guardar("abierto")} style={btnS}>Guardar abierto</button>
         <button onClick={()=>guardar("cerrado")} style={btnS}>Guardar cerrado</button>
-        <button onClick={onExportar} style={btnP}>Exportar →</button>
+        <button onClick={onExportar} style={btnP}>Salidas →</button>
       </div>
     </div>
     {saveMsg&&<div style={{padding:"10px 16px",background:"#D1FAE5",borderRadius:8,fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{saveMsg}</div>}
@@ -174,8 +173,7 @@ function Planilla(props){
             {inversions.length>0
               ?inversions.map((v,i)=><p key={i} style={{color:"#B42318"}}>Precio invertido en {v.zona} · {v.cat}: {v.plan1} (${fmt0(v.price1)}) es más caro que {v.plan2} (${fmt0(v.price2)}).</p>)
               :<p style={{color:"#374151"}}>Sin precios invertidos entre planes.</p>}
-            {results.some(r=>r.bd.skipped>0)&&<p style={{color:"#92400E"}}>Hay filas sin edad válida que no se cotizaron.</p>}
-          </div>
+                      </div>
         </div>
 
         {aiLog.length>0&&(<div style={card({padding:16})}>

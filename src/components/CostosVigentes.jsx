@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FONT, BLUE, BORDER, CATS, EMPTY_CATS } from "../constants";
+import { FONT, CATS, EMPTY_CATS } from "../constants";
 import { btnP, btnS, inp, card, TH, TD } from "../styles";
 import AjusteHistorial from "./AjusteHistorial";
 
@@ -45,6 +45,5 @@ function CostosVigentes({costos,onSave,ajustes=[],onAjusteUpdate}){
   />
   </div>);
 }
-
 
 export default CostosVigentes;

@@ -1,9 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import * as XLSX from "xlsx-js-style";
-import { FONT, BLUE, BLUE_LT, BORDER, GRAY,
-  CATS, CAT_IDS, EMPTY_CATS,
-  ZONA_IDS, ZONA_COLORS,
-  OSDE_CATS, EMPTY_OSDE, MEJORAS_DEF } from "../constants";
+import { FONT, BLUE, BLUE_LT, BORDER, CAT_IDS, ZONA_IDS, ZONA_COLORS, MEJORAS_DEF } from "../constants";
 import { fmt, planTier } from "../utils";
 import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
@@ -35,7 +32,7 @@ function DuplicadosModal({items,onResolve}){
           <div>
             <h3 style={{fontSize:16,fontWeight:700,color:BLUE,marginBottom:4}}>Titulares duplicados en el archivo</h3>
             <p style={{fontSize:13,color:"#374151",lineHeight:1.5}}>
-              Se encontraron <strong>{items.length} grupo{items.length>1?"s familiares":""} familiar{items.length===1?"":""}</strong> con dos filas marcadas como <em>Titular</em>. Elegí qué hacer con cada uno.
+              Se encontraron <strong>{items.length} {items.length>1?"grupos familiares":"grupo familiar"}</strong> con dos filas marcadas como <em>Titular</em>. Elegí qué hacer con cada uno.
             </p>
           </div>
         </div>
@@ -97,7 +94,7 @@ function DuplicadosModal({items,onResolve}){
 function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
-  const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});
+  const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",planCol:"",zonaCol:""});
   const [forcedZona,setForcedZona]=useState(null);
   const [planMapping,setPlanMapping]=useState({});
   const [adjPrices,setAdjPrices]=useState({});
@@ -290,8 +287,6 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
         return[c,(base*(1+(ajC.pct||0))+(ajC.cats?.[c]||0)+mejCost)*brokerMult];
       }));
       const bd=calcBD(empList,map,effPrices,effCostos);
-      // mapping: plan vigente → plan Omint (si son distintos)
-      const mapping=planVigente!==cotId?[{from:planVigente,to:cotId}]:[];
       // baseCostosXLS: costo sin mejoras ni comisión (para que Excel pueda desglosar correctamente)
       const baseCostosXLS=Object.fromEntries(CAT_IDS.map(c=>[c,adjC[c]!==undefined?adjC[c]:baseCostos[c]||0]));
       // basePreciosXLS: precio original sin ajuste IA (para que Excel aplique la fórmula *(1+adj) sin doble ajuste)
@@ -299,7 +294,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
       // osdeKey: clave para comparación OSDE (por plan vigente, no por plan Omint)
       const osdeKey=`${zona}||${planVigente}`;
       const sinPrecios=Object.keys(basePrices).length===0;
-      return{zona,planId,cotId,mejSel,planVigente,empList,bd,mapping,adjKey,osdeKey,sim:isSim,sinPrecios,ajC,hasAdjP:Object.keys(adjP).length>0,hasAdjC:Object.keys(adjC).length>0,baseCostosXLS,basePreciosXLS};
+      return{zona,planId,cotId,mejSel,planVigente,empList,bd,adjKey,osdeKey,sim:isSim,sinPrecios,ajC,baseCostosXLS,basePreciosXLS};
     });
   }
 
@@ -352,7 +347,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   function applyParsedResult(result){
         setBandaForzada("");
         setEmps(result.rows);
-        setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
+        setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
         const info=`✓ ${result.rows.length} familias cargadas (${result.totalRaw} filas procesadas${result.filasIgnoradas>0?`, ${result.filasIgnoradas} ignoradas`:""})`;
         const warns=[];
         if(result.hijosEdadInvalida&&result.hijosEdadInvalida.length>0){
@@ -496,6 +491,27 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     setTimeout(()=>setSaveMsg(""),2500);
   }
 
+  // Paso 2 (simulación y mapeo): duplicar plan y cómo va cada plan en la propuesta
+  const extrasPaso2=(<>
+      {/* DUPLICAR PLAN */}
+      <div style={{...card(),marginTop:"1rem"}}>
+        <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Duplicar plan</p>
+        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: abajo le ponés el nombre que va en la propuesta y en la planilla le elegís mejoras y ajustes.</p>
+        {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+          {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
+            {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar copia" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
+          </span>)}
+        </div>}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <select value={planADuplicar} onChange={e=>setPlanADuplicar(e.target.value)} style={{...inp,width:200}}>
+            <option value="">Elegí un plan…</option>
+            {allOmintPlans.map(id=><option key={id} value={id}>{id}</option>)}
+          </select>
+          <button onClick={()=>duplicarPlan(planADuplicar)} disabled={!planADuplicar} style={{...btnS,fontSize:12,opacity:planADuplicar?1:0.5}}>⧉ Duplicar</button>
+        </div>
+      </div>
+      <PlanesPropuesta grupos={gruposPaso2} isSim={isSim} osde={osde} planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames} planMappingOsde={planMappingOsde} setPlanMappingOsde={setPlanMappingOsde}/>
+  </>);
   const stepN=sub===1?1:sub==="mapeo"?2:sub===3?3:4;
   const sDef=[{n:1,l:"Nómina"},{n:2,l:isSim?"Planes":"Mapeo"},{n:3,l:"Planilla"},{n:4,l:"Salidas"}];
 
@@ -569,7 +585,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       </div>):(<div>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#D1FAE5",borderRadius:8,marginBottom:"1.25rem",border:"1px solid #A7F3D0"}}>
           <span>✅</span><span style={{fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{emps.length} empleados cargados</span>
-          <button onClick={()=>{setEmps(null);setMap({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});setPlanMapping({});setNomErrors([]);}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",color:"#9CA3AF",fontFamily:FONT}}>✕ Cambiar</button>
+          <button onClick={()=>{setEmps(null);setMap({titAge:"",spAge:"",ku:"",k25:"",planCol:"",zonaCol:""});setPlanMapping({});setNomErrors([]);}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",color:"#9CA3AF",fontFamily:FONT}}>✕ Cambiar</button>
         </div>
       </div>)}
 
@@ -601,7 +617,10 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
 
       {emps&&map.titAge&&map.ku&&<NominaResumen emps={emps} map={map} getEmpZona={getEmpZona} isSim={isSim} banda={banda}/>}
 
-      {emps&&map.titAge&&map.ku&&(<button onClick={()=>pasoPlanes?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>{isSim?"Continuar: elegir planes →":needsMapeo?"Continuar: mapear planes →":"Continuar →"}</button>)}
+      {emps&&!isSim&&externalPlans.length===0&&<div style={{marginTop:"1rem",padding:"12px 16px",borderRadius:10,fontSize:13,fontFamily:FONT,background:"#FEF3C7",color:"#92400E",border:"1.5px solid #FDE68A"}}>
+        La nómina no tiene la columna "Plan de contratación", así que no hay planes para hacer equivalencias. Completala o elegí <strong>Simulación de planes</strong>.
+      </div>}
+      {emps&&map.titAge&&map.ku&&(isSim||externalPlans.length>0)&&(<button onClick={()=>pasoPlanes?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>{isSim?"Continuar: elegir planes →":needsMapeo?"Continuar: mapear planes →":"Continuar →"}</button>)}
     </div>)}
 
     {/* STEP 2 (SIMULACIÓN): ELEGIR PLANES */}
@@ -625,24 +644,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
             })}
           </div>)}
       </div>
-      {/* DUPLICAR PLAN */}
-      <div style={{...card(),marginTop:"1rem"}}>
-        <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Duplicar plan</p>
-        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: abajo le ponés el nombre que va en la propuesta y en la planilla le elegís mejoras y ajustes.</p>
-        {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
-          {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
-            {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar copia" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
-          </span>)}
-        </div>}
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <select value={planADuplicar} onChange={e=>setPlanADuplicar(e.target.value)} style={{...inp,width:200}}>
-            <option value="">Elegí un plan…</option>
-            {allOmintPlans.map(id=><option key={id} value={id}>{id}</option>)}
-          </select>
-          <button onClick={()=>duplicarPlan(planADuplicar)} disabled={!planADuplicar} style={{...btnS,fontSize:12,opacity:planADuplicar?1:0.5}}>⧉ Duplicar</button>
-        </div>
-      </div>
-      <PlanesPropuesta grupos={gruposPaso2} isSim={isSim} osde={osde} planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames} planMappingOsde={planMappingOsde} setPlanMappingOsde={setPlanMappingOsde}/>
+      {extrasPaso2}
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
         <button onClick={()=>setSub(3)} disabled={planesSim.length===0} style={{...btnP,opacity:planesSim.length===0?0.5:1,cursor:planesSim.length===0?"not-allowed":"pointer"}}>Continuar →</button>
@@ -676,24 +678,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           </table>
         </div>
       </div>
-      {/* DUPLICAR PLAN */}
-      <div style={{...card(),marginTop:"1rem"}}>
-        <p style={{fontSize:13,fontWeight:600,color:BLUE,marginBottom:4,fontFamily:FONT}}>Duplicar plan</p>
-        <p style={{fontSize:12,color:"#6B7280",marginBottom:10,fontFamily:FONT}}>Para cotizar el mismo plan dos veces (ej. 8500_PYME y 8500_PYME con Farmacia 60%). La copia es un plan aparte: abajo le ponés el nombre que va en la propuesta y en la planilla le elegís mejoras y ajustes.</p>
-        {variantes.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
-          {variantes.map(v=><span key={v.id} style={{...badge(BLUE,BLUE_LT),fontSize:12,display:"inline-flex",alignItems:"center",gap:6}}>
-            {v.id}<button onClick={()=>quitarVariante(v.id)} title="Quitar copia" style={{border:"none",background:"none",cursor:"pointer",color:"#9CA3AF",fontSize:12}}>✕</button>
-          </span>)}
-        </div>}
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <select value={planADuplicar} onChange={e=>setPlanADuplicar(e.target.value)} style={{...inp,width:200}}>
-            <option value="">Elegí un plan…</option>
-            {allOmintPlans.map(id=><option key={id} value={id}>{id}</option>)}
-          </select>
-          <button onClick={()=>duplicarPlan(planADuplicar)} disabled={!planADuplicar} style={{...btnS,fontSize:12,opacity:planADuplicar?1:0.5}}>⧉ Duplicar</button>
-        </div>
-      </div>
-      <PlanesPropuesta grupos={gruposPaso2} isSim={isSim} osde={osde} planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames} planMappingOsde={planMappingOsde} setPlanMappingOsde={setPlanMappingOsde}/>
+      {extrasPaso2}
       <div style={{display:"flex",gap:10,marginTop:"1.5rem"}}>
         <button onClick={()=>setSub(1)} style={btnS}>← Volver</button>
         <button onClick={()=>setSub(3)} style={btnP}>Continuar →</button>
@@ -720,11 +705,10 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
 
     {/* STEP 4: SALIDAS */}
     {sub==="salidas"&&<Salidas results={results} empresa={empresa} setEmpresa={setEmpresa} cfg={salidaCfg} setCfg={setSalidaCfg}
-      emps={emps} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} planMejoras={planMejoras} mejoras={mejoras||{}}
+      emps={emps} brokerPct={brokerPct} osde={osde} planMappingOsde={planMappingOsde} mejoras={mejoras||{}}
       planCustomNames={planCustomNames} setPlanCustomNames={setPlanCustomNames} adjPct={adjPct} listas={{precios,costos}}
       guardar={guardar} saveMsg={saveMsg} onVolver={()=>setSub(3)}/>}
   </div>);
 }
-
 
 export default Cotizador;

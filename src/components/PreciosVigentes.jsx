@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FONT, BLUE, BLUE_LT, BORDER, ZONA_IDS, ZONA_COLORS, CATS, EMPTY_CATS } from "../constants";
+import { FONT, BLUE, BLUE_LT, ZONA_IDS, ZONA_COLORS, CATS, EMPTY_CATS } from "../constants";
 import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import AjusteHistorial from "./AjusteHistorial";
 
@@ -58,6 +58,5 @@ function PreciosVigentes({precios,onSave,ajustes=[],onAjusteUpdate}){
   />
   </div>);
 }
-
 
 export default PreciosVigentes;

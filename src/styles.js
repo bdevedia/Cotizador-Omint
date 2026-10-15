@@ -1,4 +1,4 @@
-import { FONT, BLUE, BLUE_LT, BORDER, GRAY } from "./constants";
+import { FONT, BLUE, BORDER, GRAY } from "./constants";
 
 // ── ESTILOS ───────────────────────────────────────────────────────────────────
 const card=(x={})=>({background:"#fff",border:`1px solid ${BORDER}`,borderRadius:12,padding:"1.5rem",...x});

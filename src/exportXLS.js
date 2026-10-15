@@ -1,12 +1,12 @@
 import * as XLSX from "xlsx-js-style";
-import { CATS, CAT_IDS, ZONA_IDS, MEJORAS_DEF } from "./constants";
+import { ZONA_IDS, MEJORAS_DEF } from "./constants";
 import { calcOsdeFromEmps, pctAjuste, planOsdeDe } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
 // Hojas: "Cotización" (todos los planes, un bloque por zona), "Nómina", "Lista de Costos" y
 // "Lista de Precios". Los precios y costos de la cotización toman por fórmula los de las listas.
 // listas: {precios:{zona:{plan:{cat}}}, costos:{plan:{cat}}} — las mismas que usa la cotización.
-function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planMejorasMap,planesNombres,adjPct,listas){
+function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,masaSalarial,mejoras,planesNombres,adjPct,listas){
   // Mostrar plan Omint como label principal; si tiene nombre custom, usar ese
   const planLabel=res=>(planesNombres||{})[res.adjKey]||res.cotId;
   const today=new Date().toLocaleDateString("es-AR");
@@ -439,7 +439,7 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
     uniqueOmint.forEach((res,pi)=>{
       mejoraRowMap[res.cotId]=row;
       p(0,row,planLabel(res),fBOLD,planFill(pi),aC,BORDER_ALL);
-      const mejSel=res.mejSel||(planMejorasMap||{})[res.adjKey]||{};
+      const mejSel=res.mejSel||{};
       [1,2,3,4,5,7,8].forEach(ci=>{
         const catKey=CAT_KEYS[CAT_COLS.indexOf(ci)];
         let total=0;

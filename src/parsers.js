@@ -1,6 +1,5 @@
 import * as XLSX from "xlsx-js-style";
-import { OSDE_CATS, EMPTY_OSDE, BANDA, PRECIO_COLS, ZONA_IDS } from "./constants";
-
+import { OSDE_CATS, PRECIO_COLS } from "./constants";
 
 // ── PARSER DE NÓMINA (formato fijo) ─────────────────────────────────────────
 // Columnas requeridas: "Grupo Familiar", "Tipo benef", y al menos una de "Edad" | "Fecha de Nacimiento"
@@ -345,5 +344,5 @@ function downloadTemplate(){
   XLSX.writeFile(wb,"template_nomina_omint.xlsx");
 }
 
-export { parseNominaFija, downloadTemplate, parsePreciosSheet, parsePreciosFile, parseCostosFile,
+export { parseNominaFija, downloadTemplate, parsePreciosFile, parseCostosFile,
   parseOsdeFile, downloadOsdeTemplate };
