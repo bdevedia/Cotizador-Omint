@@ -4,7 +4,7 @@ import { FONT, BLUE, BLUE_LT, BORDER, CAT_IDS, ZONA_IDS, ZONA_COLORS, MEJORAS_DE
 import { fmt, planTier } from "../utils";
 import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
-import { calcBD, pctAjuste, checkPriceInversions, bandaPorCapitas, ordenarBandas, rangoBanda } from "../calc";
+import { calcBD, pctAjuste, checkPriceInversions, bandaPorCapitas, ordenarBandas, rangoBanda, planDeCosto } from "../calc";
 import Salidas from "./Salidas";
 import NominaResumen from "./NominaResumen";
 import PlanesPropuesta from "./PlanesPropuesta";
@@ -288,7 +288,7 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
       const basePrices=precios?.[zona]?.[planId]||{};
       const adjP=adjPrices[adjKey]||{};
       const effPrices=Object.fromEntries(CAT_IDS.map(c=>[c,adjP[c]!==undefined?adjP[c]:basePrices[c]||0]));
-      const baseCostos=costos?.[planId]||{};
+      const baseCostos=costos?.[planDeCosto(costos,planId)]||{};
       const adjC=adjCostos[adjKey]||{};
       const ajC=ajusteCostos[adjKey]||{};
       // Mejoras: las elegidas a mano para esta opción o, si no, las fijas de la opción
