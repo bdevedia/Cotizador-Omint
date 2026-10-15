@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx-js-style";
 import { ZONA_IDS, MEJORAS_DEF } from "./constants";
-import { calcOsdeFromEmps, pctAjuste, planOsdeDe } from "./calc";
+import { calcOsdeFromEmps, pctAjuste, planOsdeDe, planDeCosto } from "./calc";
 
 // ── EXPORTAR EXCEL ANÁLISIS ───────────────────────────────────────────────────
 // Hojas: "Cotización" (todos los planes, un bloque por zona), "Nómina", "Lista de Costos" y
@@ -393,11 +393,12 @@ function exportAnalisisXLS(results,empresa,emps,brokerPct,osde,planMappingOsde,m
       costoEERowMap[res.cotId]=row;
       p(0,row,planLabel(res),fBOLD,pf,aC,BORDER_ALL);
       const getC=id=>(res.baseCostosXLS||{})[id]??res.bd.rows.find(x=>x.id===id)?.costo??0;
-      const filaCosto=lc.pos.costos?.[res.planId];
+      const planCosto=planDeCosto(costosLista,res.planId);
+      const filaCosto=lc.pos.costos?.[planCosto];
       Object.entries(CAT_COL).forEach(([id,ci])=>{
         const v=getC(id);
         // Costo de lista → referencia a la hoja Lista de Costos; costo editado a mano → valor
-        const deLista=filaCosto!=null&&Math.abs(v-(costosLista[res.planId]?.[id]||0))<0.005;
+        const deLista=filaCosto!=null&&Math.abs(v-(costosLista[planCosto]?.[id]||0))<0.005;
         if(deLista)pF(ci,row,`+${xref(LISTA_COSTOS,ci,filaCosto)}`,+v.toFixed(2),fNorm,null,aC,BORDER_ALL,NF_MONEY);
         else p(ci,row,+v.toFixed(0),fNorm,null,aC,BORDER_ALL,NF_MONEY);
       });

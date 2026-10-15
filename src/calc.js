@@ -142,4 +142,18 @@ function bandaPorCapitas(labels,capitas){
   return debajo.length?debajo[debajo.length-1]:ord[0];
 }
 
-export { rangoBanda, ordenarBandas, bandaPorCapitas, planOsdeDe, calcBD, calcMultiplier, pctAjuste, capitado054, capitado059, preciosCapitados, calcOsdeFromEmps, checkPriceInversions };
+// ── PLAN DE COSTOS ───────────────────────────────────────────────────────────
+// Los planes con letra al final (4500_23C, 2500_24S, 4500_PYME_S) tienen el mismo costo que su
+// plan sin letra. Si el plan no tiene costo propio, se usa el del plan base.
+function planDeCosto(costos,planId){
+  let id=planId;
+  while(id){
+    if(costos?.[id])return id;
+    const base=id.replace(/_?[CS]$/,"");
+    if(base===id)break;
+    id=base;
+  }
+  return planId;
+}
+
+export { planDeCosto, rangoBanda, ordenarBandas, bandaPorCapitas, planOsdeDe, calcBD, calcMultiplier, pctAjuste, capitado054, capitado059, preciosCapitados, calcOsdeFromEmps, checkPriceInversions };
