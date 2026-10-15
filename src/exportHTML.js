@@ -33,11 +33,10 @@ function generateProposalHTML(cfg,results){
   const {empresa,fecha,validez,formato,planesNombres,textoExtra}=cfg;
   const capitados=formato==="capitados"||formato==="capitados2";
 
-  // Un renglón por plan cotizado y zona (adjKey): con varias zonas cada una tiene sus precios
+  // Un renglón por plan cotizado (la cotización es de una sola zona)
   const seen=new Set();
   const planes=results.filter(r=>{if(seen.has(r.adjKey))return false;seen.add(r.adjKey);return true;});
-  const multiZona=new Set(planes.map(r=>r.zona)).size>1;
-  const nombre=r=>((planesNombres||{})[r.adjKey]||r.cotId)+(multiZona?` · ${r.zona}`:"");
+  const nombre=r=>(planesNombres||{})[r.adjKey]||r.cotId;
 
   let tabla;
   if(formato==="capitados2"){
