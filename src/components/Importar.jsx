@@ -2,19 +2,20 @@ import { useState } from "react";
 import { FONT, BLUE, BLUE_LT, BORDER } from "../constants";
 import { btnS, card } from "../styles";
 import { parsePreciosFile, parseCostosFile } from "../parsers";
+import { ordenarBandas } from "../calc";
 
 // ── IMPORTAR ──────────────────────────────────────────────────────────────────
 function Importar({onPreciosImport,onCostosImport}){
   const [pS,setPS]=useState(null);const[pM,setPM]=useState("");
   const [cS,setCS]=useState(null);const[cM,setCM]=useState("");
-  async function handleP(e){const f=e.target.files[0];if(!f)return;setPS("loading");try{const d=await parsePreciosFile(f);onPreciosImport(d);const planes=new Set(Object.values(d).flatMap(z=>Object.keys(z)));setPS("ok");setPM(`${Object.keys(d).length} zonas · ${planes.size} planes · banda 200-499 importada`);}catch(err){setPS("error");setPM(err.message);}}
+  async function handleP(e){const f=e.target.files[0];if(!f)return;setPS("loading");try{const {precios,bandas}=await parsePreciosFile(f);onPreciosImport(precios,bandas);const planes=new Set(Object.values(precios).flatMap(z=>Object.keys(z)));const rotulos=[...new Set(Object.values(bandas).flatMap(z=>Object.values(z).flatMap(b=>Object.keys(b))))];setPS("ok");setPM(`${Object.keys(precios).length} zonas · ${planes.size} planes · ${rotulos.length} bandas de cápitas: ${ordenarBandas(rotulos).join(" · ")}`);}catch(err){setPS("error");setPM(err.message);}}
   async function handleC(e){const f=e.target.files[0];if(!f)return;setCS("loading");try{const d=await parseCostosFile(f);onCostosImport(d);setCS("ok");setCM(`${Object.keys(d).length} planes importados`);}catch(err){setCS("error");setCM(err.message);}}
   const S=({s,m})=>!s?null:s==="ok"?<span style={{fontSize:12,color:"#16A34A",fontFamily:FONT}}>✓ {m}</span>:s==="error"?<span style={{fontSize:12,color:"#DC2626",fontFamily:FONT}}>✗ {m}</span>:<span style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>Procesando…</span>;
   return(<div>
     <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Importar datos</h2>
     <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Subí los archivos mensuales para actualizar precios y costos automáticamente.</p>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-      {[{t:"Lista de Precios (.xls)",n:"Lista_de_precios_Empresas_Unificada_...",onChange:handleP,s:pS,m:pM,note:"Sheets 1=AMBA · 2=Córdoba · 7=Mendoza · Extrae banda 200-499"},
+      {[{t:"Lista de Precios (.xls)",n:"Lista_de_precios_Empresas_Unificada_...",onChange:handleP,s:pS,m:pM,note:"Sheets 1=AMBA · 2=Córdoba · 7=Mendoza · Importa todas las bandas de cápitas"},
         {t:"Rentabilidad / Costos (.xlsx)",n:"Rentabilidad_objetivo_EE_...",onChange:handleC,s:cS,m:cM,note:'Sheet "Costos Cerrado+Abierto"'}].map(item=>(
         <div key={item.t} style={card()}>
           <p style={{fontSize:14,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>{item.t}</p>

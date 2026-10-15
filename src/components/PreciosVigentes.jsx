@@ -22,7 +22,7 @@ function PreciosVigentes({precios,onSave,ajustes=[],onAjusteUpdate}){
   const baseRef=precios?.AMBA?.[planList[0]]?.s0_25||0;
   return(<div>
     <h2 style={{fontSize:22,fontWeight:700,color:BLUE,marginBottom:4,fontFamily:FONT}}>Precios Vigentes</h2>
-    <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Precios por zona y plan (banda 200-499 cápitas). Podés importarlos o editarlos manualmente.</p>
+    <p style={{fontSize:13,color:"#6B7280",marginBottom:"1.5rem",fontFamily:FONT}}>Precios por zona y plan de la banda 200-499 cápitas. Al importar la lista se guardan también las otras bandas, y en la cotización se usa la que corresponde a las cápitas de la nómina. Lo que edites acá cambia la banda 200-499.</p>
     {allPlans.length===0&&<div style={{...card(),padding:"2rem",textAlign:"center",color:"#9CA3AF"}}><p style={{fontFamily:FONT}}>No hay precios cargados. Importá el archivo de lista de precios.</p></div>}
     {allPlans.length>0&&<>
       <div style={{display:"flex",gap:8,marginBottom:"0.75rem",flexWrap:"wrap"}}>

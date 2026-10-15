@@ -7,7 +7,7 @@ import { FONT, BLUE, BLUE_LT, BORDER, GRAY,
 import { fmt, planTier } from "../utils";
 import { badge, btnP, btnS, inp, card, TH, TD } from "../styles";
 import { parseNominaFija, downloadTemplate } from "../parsers";
-import { calcBD, pctAjuste, checkPriceInversions } from "../calc";
+import { calcBD, pctAjuste, checkPriceInversions, bandaPorCapitas, ordenarBandas, rangoBanda } from "../calc";
 import Salidas from "./Salidas";
 import NominaResumen from "./NominaResumen";
 import PlanesPropuesta from "./PlanesPropuesta";
@@ -94,7 +94,7 @@ function DuplicadosModal({items,onResolve}){
 }
 
 // ── COTIZADOR ─────────────────────────────────────────────────────────────────
-function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey}){
+function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey}){
   const [sub,setSub]=useState(1);
   const [emps,setEmps]=useState(null);
   const [map,setMap]=useState({titAge:"",spAge:"",ku:"",k25:"",name:"",planCol:"",zonaCol:""});
@@ -126,8 +126,34 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   // para cotizarlo con otras mejoras o ajustes). {id, planId, mejoras}
   const [variantes,setVariantes]=useState([]);
   const [planADuplicar,setPlanADuplicar]=useState("");
+  const [bandaForzada,setBandaForzada]=useState(""); // banda de cápitas elegida a mano ("" = automática)
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
+
+  // ── BANDA DE CÁPITAS ──
+  // La lista trae un precio por banda de cápitas (tamaño de la nómina). Se usa la banda que
+  // corresponde a los socios de toda la nómina, salvo que se elija otra a mano.
+  const capitas=emps&&map.titAge?calcBD(emps,map,{},{}).rows.reduce((a,r)=>a+r.count,0):0;
+  const bandasDisp=ordenarBandas([...new Set(Object.values(preciosBandas||{}).flatMap(z=>Object.values(z||{}).flatMap(b=>Object.keys(b||{}))))]);
+  const bandaAuto=bandasDisp.length&&capitas>0?bandaPorCapitas(bandasDisp,capitas):"";
+  const bandaUsada=bandasDisp.includes(bandaForzada)?bandaForzada:bandaAuto;
+  // Cada plan toma la banda entre las suyas: los PYME no tienen "1 a 10", así que con pocas
+  // cápitas usan su primera banda ("11 a 99"). Sin bandas, el precio de la lista (200-499).
+  const capitasBanda=bandaForzada&&bandasDisp.includes(bandaForzada)?(rangoBanda(bandaForzada)?.lo??capitas):capitas;
+  const precios=bandaUsada?Object.fromEntries(Object.entries(preciosLista||{}).map(([z,planes])=>[z,
+    Object.fromEntries(Object.entries(planes||{}).map(([pl,cats])=>{
+      const bs=preciosBandas?.[z]?.[pl];
+      const labels=Object.keys(bs||{});
+      return[pl,labels.length?bs[bandaPorCapitas(labels,capitasBanda)]:cats];
+    }))])):preciosLista;
+  // Planes que no tienen la banda general y usan otra (ej. PYME con 10 cápitas o menos)
+  const otraBanda={};
+  if(bandaUsada)Object.values(preciosBandas||{}).forEach(planes=>Object.entries(planes||{}).forEach(([pl,bs])=>{
+    const labels=Object.keys(bs||{});
+    const l=labels.length?bandaPorCapitas(labels,capitasBanda):null;
+    if(l&&l!==bandaUsada)otraBanda[pl]=l;
+  }));
+  const banda={capitas,disponibles:bandasDisp,auto:bandaAuto,usada:bandaUsada,forzada:bandasDisp.includes(bandaForzada)?bandaForzada:"",setForzada:setBandaForzada,otraBanda};
 
   const isOmintPlan=p=>Object.values(precios||{}).some(z=>z[p]);
   const externalPlans=emps&&map.planCol?[...new Set(emps.map(e=>e[map.planCol]).filter(Boolean))]:[];
@@ -311,6 +337,7 @@ function Cotizador({precios,costos,osde,mejoras,onSaveQuote,knownEmpresas,apiKey
   }
 
   function applyParsedResult(result){
+        setBandaForzada("");
         setEmps(result.rows);
         setMap({titAge:"EDAD_TITULAR",spAge:"EDAD_CONYUGE",ku:"HIJOS_MENORES_25",k25:"HIJOS_MAYORES_25_EDADES",name:"NOMBRE",planCol:"PLAN_ACTUAL",zonaCol:"ZONA"});
         const info=`✓ ${result.rows.length} familias cargadas (${result.totalRaw} filas procesadas${result.filasIgnoradas>0?`, ${result.filasIgnoradas} ignoradas`:""})`;
@@ -448,7 +475,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         ?{total:null,totalFac:null,totalCosto:null,cfTotal:null,
           simulaciones:simTotals.map(({cotId,fac,costo,cf})=>({planId:cotId,fac,costo,cf}))}
         :{total:grandFac,totalFac:grandFac,totalCosto:grandCosto,cfTotal:grandCF}),
-      modo,socios:emps?.length||0,
+      modo,socios:emps?.length||0,bandaPrecios:bandaUsada||null,
       adjPrices:{...adjPrices},adjCostos:{...adjCostos},
       aiLog:[...aiLog],snapshot,
     });
@@ -559,7 +586,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
         <p style={{fontSize:12}}>Familias afectadas: {spouseWarning.familias.join(", ")}</p>
       </div>)}
 
-      {emps&&map.titAge&&map.ku&&<NominaResumen emps={emps} map={map} getEmpZona={getEmpZona} isSim={isSim}/>}
+      {emps&&map.titAge&&map.ku&&<NominaResumen emps={emps} map={map} getEmpZona={getEmpZona} isSim={isSim} banda={banda}/>}
 
       {emps&&map.titAge&&map.ku&&(<button onClick={()=>pasoPlanes?setSub("mapeo"):setSub(3)} style={{...btnP,marginTop:"1.5rem"}}>{isSim?"Continuar: elegir planes →":needsMapeo?"Continuar: mapear planes →":"Continuar →"}</button>)}
     </div>)}
@@ -658,7 +685,7 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
     </div>)}
 
     {/* STEP 3: PLANILLA DE COTIZACIÓN */}
-    {sub===3&&<Planilla
+    {sub===3&&<Planilla banda={banda}
       results={results} isSim={isSim} multiSim={multiSim} simTotals={simTotals} emps={emps}
       grandFac={grandFac} grandCosto={grandCosto} grandCF={grandCF} inversions={inversions}
       precios={precios} mejoras={mejoras} osde={osde}

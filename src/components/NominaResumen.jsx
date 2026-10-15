@@ -1,14 +1,16 @@
 import { FONT, BLUE, BLUE_LT, BORDER, CATS, CAT_IDS, ZONA_COLORS } from "../constants";
-import { TH, TD, badge, card } from "../styles";
+import { TH, TD, badge, card, inp } from "../styles";
 import { calcBD } from "../calc";
 
 // ── RESUMEN DE LA NÓMINA (paso 1) ─────────────────────────────────────────────
 // Familias, socios y distribución por rango apenas se carga la nómina, antes de cotizar.
 // Usa el mismo conteo que la planilla (calcBD), así los números coinciden en el paso 3.
 
+// Los rótulos de la lista ya suelen decir "cápitas"
+const conCapitas=l=>/c[aá]pita/i.test(l)?l:`${l} cápitas`;
 const RANGO={s0_25:"00-25",s26_34:"26-35",s35_54:"36-54",s55_59:"55-59",s60plus:"60+",h1:"Hijo 1",h2plus:"Hijo 2+"};
 
-function NominaResumen({emps,map,getEmpZona,isSim}){
+function NominaResumen({emps,map,getEmpZona,isSim,banda}){
   // Filas: por zona y, en equivalencias, por plan vigente
   const grupos={};
   emps.forEach(e=>{
@@ -48,6 +50,19 @@ function NominaResumen({emps,map,getEmpZona,isSim}){
         {k.d&&<p style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>{k.d}</p>}
       </div>))}
     </div>
+    {banda?.disponibles?.length>0&&<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:`1px solid ${BORDER}`,marginBottom:16}}>
+      <label htmlFor="banda-precios" style={{fontSize:13,fontWeight:600,color:"#374151",fontFamily:FONT}}>Banda de precios</label>
+      <select id="banda-precios" value={banda.forzada} onChange={e=>banda.setForzada(e.target.value)} style={{...inp,width:"auto",minWidth:220}}>
+        <option value="">{conCapitas(banda.auto)} (automática)</option>
+        {banda.disponibles.filter(b=>b!==banda.auto).map(b=><option key={b} value={b}>{conCapitas(b)}</option>)}
+      </select>
+      <span style={{fontSize:12,color:"#4B5563",fontFamily:FONT}}>
+        {banda.forzada?`Elegida a mano. Por la nómina (${banda.capitas} cápitas) correspondería ${banda.auto}.`:`Por la nómina: ${banda.capitas} cápitas.`}
+      </span>
+      {Object.keys(banda.otraBanda||{}).length>0&&<span style={{flexBasis:"100%",fontSize:12,color:"#92400E",fontFamily:FONT}}>
+        No tienen esa banda y usan su primera: {[...new Set(Object.values(banda.otraBanda))].map(l=>`${l} → ${Object.keys(banda.otraBanda).filter(pl=>banda.otraBanda[pl]===l).sort().join(", ")}`).join(" · ")}.
+      </span>}
+    </div>}
     <div style={{overflowX:"auto"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:620,fontFamily:FONT}}>
         <thead><tr>

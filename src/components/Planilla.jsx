@@ -43,7 +43,7 @@ function Planilla(props){
     empresa,setEmpresa,knownEmpresas,
     chat,chatIn,setChatIn,chatLoading,sendChat,aiLog,setAiLog,
     scenarios,setScenarios,setAdjPrices,setAdjPct,
-    guardar,saveMsg,onExportar,onVolver}=props;
+    guardar,saveMsg,onExportar,onVolver,banda}=props;
 
   const [showSug,setShowSug]=useState(false);
   const [ajusteAbierto,setAjusteAbierto]=useState(null); // adjKey con el editor de ajuste abierto
@@ -97,7 +97,7 @@ function Planilla(props){
     {/* Barra: empresa y acciones */}
     <div style={{display:"flex",alignItems:"flex-end",gap:12,flexWrap:"wrap"}}>
       <div style={{flex:"1 1 240px",minWidth:200,maxWidth:520,position:"relative"}}>
-        <label htmlFor="planilla-empresa" style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Empresa <span style={{fontWeight:400,textTransform:"none",letterSpacing:0,color:"#4B5563",marginLeft:6}}>{isSim?"Simulación":"Equivalencias"} · {zonas.join(", ")} · {emps?.length||0} familias · {totalSocios} socios</span></label>
+        <label htmlFor="planilla-empresa" style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em",fontFamily:FONT}}>Empresa <span style={{fontWeight:400,textTransform:"none",letterSpacing:0,color:"#4B5563",marginLeft:6}}>{isSim?"Simulación":"Equivalencias"} · {zonas.join(", ")} · {emps?.length||0} familias · {totalSocios} socios{banda?.usada&&<> · precios banda {banda.usada}{banda.forzada&&" (elegida a mano)"}</>}</span></label>
         <input id="planilla-empresa" value={empresa} onChange={e=>{setEmpresa(e.target.value);setShowSug(true);}} onBlur={()=>setTimeout(()=>setShowSug(false),150)} onFocus={()=>setShowSug(true)} placeholder="Nombre de la empresa" style={inp}/>
         {showSug&&sugerencias.length>0&&(<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:10,background:"#fff",border:`1px solid ${BORDER}`,borderRadius:"0 0 8px 8px",boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
           {sugerencias.map(s=><button key={s} onClick={()=>{setEmpresa(s);setShowSug(false);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:"#fff",cursor:"pointer",fontSize:13,fontFamily:FONT,color:"#111827"}}>{s}</button>)}

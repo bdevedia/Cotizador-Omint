@@ -212,22 +212,31 @@ function parseNominaFija(rawRows,rawCols,resolucionDuplicados){
 }
 
 // ── PARSERS ───────────────────────────────────────────────────────────────────
+// Cada plan trae un renglón por banda de cápitas (ej. "1 a 49", "50 a 199", "200 a 499",
+// "500 o más"). Devuelve {precios, bandas}: precios es la banda 200-499 (la de siempre, la
+// que se edita en Precios Vigentes) y bandas tiene todas, por rótulo.
 function parsePreciosSheet(rows){
-  const plans={};let cur=null;
+  const bandas={};let cur=null;
   rows.forEach(row=>{
     if(!row||row[0]==null)return;
     const v=String(row[0]).trim();
-    if(v.startsWith("Plan ")){cur=v.slice(5).trim();plans[cur]=null;}
-    else if(cur&&v.includes("200")){
-      const nums=PRECIO_COLS.map(i=>{const x=row[i];return typeof x==="number"?Math.round(x):0;});
-      if(nums.some(x=>x>0)){
-        plans[cur]={s0_25:nums[0],s26_34:nums[1],s35_54:nums[2],s55_59:nums[3],s60plus:nums[4],h1:nums[5],h2plus:nums[6]};
-        cur=null; // tomamos solo el primer "200" encontrado por plan
-      }
-    }
+    if(v.startsWith("Plan ")){cur=v.slice(5).trim();if(!bandas[cur])bandas[cur]={};return;}
+    if(!cur||!/\d/.test(v))return;
+    const nums=PRECIO_COLS.map(i=>{const x=row[i];return typeof x==="number"?Math.round(x):0;});
+    if(nums.filter(x=>x>0).length<3)return;
+    // Rótulo usable como clave en Firebase (sin . $ # [ ] /)
+    const label=v.replace(/[.$#[\]/]/g,"-").replace(/\s+/g," ");
+    if(bandas[cur][label])return; // si se repite, vale el primero
+    bandas[cur][label]={s0_25:nums[0],s26_34:nums[1],s35_54:nums[2],s55_59:nums[3],s60plus:nums[4],h1:nums[5],h2plus:nums[6]};
   });
-  // eliminar planes sin datos
-  return Object.fromEntries(Object.entries(plans).filter(([,v])=>v!==null));
+  const precios={},conBandas={};
+  Object.entries(bandas).forEach(([plan,bs])=>{
+    const labels=Object.keys(bs);if(labels.length===0)return;
+    const l200=labels.find(l=>l.includes("200"))||labels[0];
+    precios[plan]=bs[l200];
+    conBandas[plan]=bs;
+  });
+  return{precios,bandas:conBandas};
 }
 
 function parsePreciosFile(file){
@@ -237,12 +246,13 @@ function parsePreciosFile(file){
       try{
         const wb=XLSX.read(e.target.result,{type:"binary"});
         const map={AMBA:"1",Córdoba:"2",Mendoza:"7"};
-        const result={};
+        const precios={},bandas={};
         Object.entries(map).forEach(([z,s])=>{
           const ws=wb.Sheets[s];if(!ws)return;
-          result[z]=parsePreciosSheet(XLSX.utils.sheet_to_json(ws,{header:1,defval:null}));
+          const r=parsePreciosSheet(XLSX.utils.sheet_to_json(ws,{header:1,defval:null}));
+          precios[z]=r.precios;bandas[z]=r.bandas;
         });
-        res(result);
+        res({precios,bandas});
       }catch(err){rej(err);}
     };
     r.readAsBinaryString(file);
