@@ -154,4 +154,19 @@ function generateProposalHTML(cfg,results){
 </html>`;
 }
 
-export { generateProposalHTML };
+// Abre la propuesta en una pestaña nueva y lanza la impresión (guardar como PDF)
+function abrirPropuestaPDF(html){
+  const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const w=window.open(url,"_blank");
+  if(w){
+    // Esperar a que carguen las fuentes de la propuesta antes de imprimir
+    w.addEventListener("load",()=>{
+      const imprimir=()=>setTimeout(()=>w.print(),300);
+      (w.document.fonts?.ready||Promise.resolve()).then(imprimir,imprimir);
+    });
+  }
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
+export { generateProposalHTML, abrirPropuestaPDF };

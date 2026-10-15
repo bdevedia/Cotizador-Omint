@@ -26,6 +26,9 @@ function conBandasLocales(v){
 // ── APP SHELL ─────────────────────────────────────────────────────────────────
 function App(){
   const [sec,setSec]=useState("cotizador");
+  // Cotización del historial para abrir en el cotizador (la key nueva lo vuelve a montar con ella)
+  const [abrir,setAbrir]=useState(null);
+  const [abrirKey,setAbrirKey]=useState(0);
   const [precios,setPrecios]=useState(null);
   const [costos,setCostos]=useState(null);
   const [osde,setOsde]=useState(null);
@@ -186,13 +189,13 @@ function App(){
     </div>
     <div style={{flex:1,padding:"2rem 2.5rem",overflowY:"auto",minWidth:0}}>
       {!loaded&&<p style={{fontSize:13,color:"#9CA3AF",fontFamily:FONT}}>Cargando…</p>}
-      {loaded&&sec==="cotizador"&&<Cotizador precios={preciosAdj} preciosBandas={bandasAdj} costos={costosAdj} osde={osdeAdj} mejoras={mejoras||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
+      {loaded&&sec==="cotizador"&&<Cotizador key={abrirKey} inicial={abrir} onAbierta={()=>setAbrir(null)} precios={preciosAdj} preciosBandas={bandasAdj} costos={costosAdj} osde={osdeAdj} mejoras={mejoras||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
       {loaded&&sec==="importar"&&<Importar onPreciosImport={(p,b)=>savePre(p,b)} onCostosImport={saveCos}/>}
       {loaded&&sec==="precios"&&<PreciosVigentes precios={preciosSolo} onSave={p=>savePre(p)} ajustes={ajustes.precios} onAjusteUpdate={h=>saveAjuste("precios",h)}/>}
       {loaded&&sec==="costos"&&<CostosVigentes costos={costos} onSave={saveCos} ajustes={ajustes.costos} onAjusteUpdate={h=>saveAjuste("costos",h)}/>}
       {loaded&&sec==="mejoras"&&<MejorasVigentes mejoras={mejoras||{}} onSave={saveMejoras}/>}
       {loaded&&sec==="osde"&&<OsdeVigentes osde={osde||{}} onSave={saveOsde} ajustes={ajustes.osde} onAjusteUpdate={h=>saveAjuste("osde",h)}/>}
-      {loaded&&sec==="historial"&&<Historial quotes={quotes} onUpdate={updQuote} onDelete={deleteQuote} onRenameEmpresa={renameEmpresa}/>}
+      {loaded&&sec==="historial"&&<Historial quotes={quotes} onUpdate={updQuote} onDelete={deleteQuote} onRenameEmpresa={renameEmpresa} onAbrir={q=>{setAbrir(q);setAbrirKey(k=>k+1);setSec("cotizador");}}/>}
       {loaded&&sec==="config"&&<Configuracion apiKey={apiKey} onSave={saveApiKey}/>}
     </div>
   </div>);

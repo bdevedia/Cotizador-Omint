@@ -3,10 +3,9 @@ function catAge(a){if(a<=25)return"s0_25";if(a<=35)return"s26_34";if(a<=54)retur
 function cfColor(cf){return cf<=70?"#16A34A":cf<=82?"#CA8A04":"#DC2626";}
 function cfBg(cf){return cf<=70?"#D1FAE5":cf<=82?"#FEF3C7":"#FEF2F2";}
 const fmt=n=>(+n).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
-const fmtD=d=>new Date(d).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"});
 function planTier(id){const m=String(id).match(/^(\d+)/);return m?parseInt(m[1]):0;}
 
 // Formato de precio igual al PDF: $ 138.826 (punto de miles, sin decimales)
 function fmtPDF(n){return"$ "+(Math.round(+n)).toLocaleString("es-AR");}
 
-export { catAge, cfColor, cfBg, fmt, fmtD, planTier, fmtPDF };
+export { catAge, cfColor, cfBg, fmt, planTier, fmtPDF };
