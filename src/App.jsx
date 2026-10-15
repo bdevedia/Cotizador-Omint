@@ -20,7 +20,6 @@ const DEF_AJUSTES={precios:[],costos:[],osde:[]};
 function App(){
   const [sec,setSec]=useState("cotizador");
   const [precios,setPrecios]=useState(null);
-  const [preciosBandas,setPreciosBandas]=useState(null); // {zona:{plan:{"50 a 199":cats,...}}}
   const [costos,setCostos]=useState(null);
   const [osde,setOsde]=useState(null);
   const [mejoras,setMejoras]=useState(null);
@@ -43,7 +42,6 @@ function App(){
 
       await Promise.all([
         loadSync("precios","omint-precios",setPrecios),
-        loadSync("preciosBandas","omint-precios-bandas",setPreciosBandas),
         loadSync("costos","omint-costos",setCostos),
         loadSync("osde","omint-osde",setOsde),
         loadSync("mejoras","omint-mejoras",setMejoras),
@@ -52,7 +50,6 @@ function App(){
       setApiKey(lsGet("omint-apikey",""));
       setLoaded(true);
       dbSubscribe("precios",v=>{setPrecios(v||{});lsSet("omint-precios",v||{});});
-      dbSubscribe("preciosBandas",v=>{setPreciosBandas(v||{});lsSet("omint-precios-bandas",v||{});});
       dbSubscribe("costos",v=>{setCostos(v||{});lsSet("omint-costos",v||{});});
       dbSubscribe("osde",v=>{setOsde(v||{});lsSet("omint-osde",v||{});});
       dbSubscribe("mejoras",v=>{setMejoras(v||{});lsSet("omint-mejoras",v||{});});
@@ -62,8 +59,14 @@ function App(){
   },[]);
 
   async function sync(fn){setSyncStatus("syncing");try{await fn();setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error:",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
-  async function savePre(p){setPrecios(p);lsSet("omint-precios",p);sync(()=>dbSet("precios",p));}
-  async function saveBandas(b){setPreciosBandas(b);lsSet("omint-precios-bandas",b);sync(()=>dbSet("preciosBandas",b));}
+  // Las bandas de cápitas viajan dentro de "precios" (precios._bandas): así se guardan en la
+  // misma clave de Firebase que ya tiene permisos. Sin bandas nuevas se conservan las que había.
+  async function savePre(p,bandas){
+    const full={...p};delete full._bandas;
+    const b=bandas!==undefined?bandas:precios?._bandas;
+    if(b&&Object.keys(b).length)full._bandas=b;
+    setPrecios(full);lsSet("omint-precios",full);sync(()=>dbSet("precios",full));
+  }
   async function saveCos(c){setCostos(c);lsSet("omint-costos",c);sync(()=>dbSet("costos",c));}
   async function saveOsde(o){setOsde(o);lsSet("omint-osde",o);sync(()=>dbSet("osde",o));}
   async function saveMejoras(m){setMejoras(m);lsSet("omint-mejoras",m);sync(()=>dbSet("mejoras",m));}
@@ -89,7 +92,8 @@ function App(){
     }
     return mult(data);
   }
-  const preciosAdj=applyAjuste(precios||{},ajustes.precios);
+  const {_bandas:preciosBandas,...preciosSolo}=precios||{}; // {zona:{plan:{"11 a 99 cápitas":cats,...}}}
+  const preciosAdj=applyAjuste(preciosSolo,ajustes.precios);
   const bandasAdj=applyAjuste(preciosBandas||{},ajustes.precios);
   const costosAdj=applyAjuste(costos||{},ajustes.costos);
   const osdeAdj=applyAjuste(osde||{},ajustes.osde);
@@ -166,8 +170,8 @@ function App(){
     <div style={{flex:1,padding:"2rem 2.5rem",overflowY:"auto",minWidth:0}}>
       {!loaded&&<p style={{fontSize:13,color:"#9CA3AF",fontFamily:FONT}}>Cargando…</p>}
       {loaded&&sec==="cotizador"&&<Cotizador precios={preciosAdj} preciosBandas={bandasAdj} costos={costosAdj} osde={osdeAdj} mejoras={mejoras||{}} onSaveQuote={saveQuote} knownEmpresas={knownEmpresas} apiKey={apiKey}/>}
-      {loaded&&sec==="importar"&&<Importar onPreciosImport={(p,b)=>{savePre(p);saveBandas(b);}} onCostosImport={saveCos}/>}
-      {loaded&&sec==="precios"&&<PreciosVigentes precios={precios} onSave={savePre} ajustes={ajustes.precios} onAjusteUpdate={h=>saveAjuste("precios",h)}/>}
+      {loaded&&sec==="importar"&&<Importar onPreciosImport={(p,b)=>savePre(p,b)} onCostosImport={saveCos}/>}
+      {loaded&&sec==="precios"&&<PreciosVigentes precios={preciosSolo} onSave={p=>savePre(p)} ajustes={ajustes.precios} onAjusteUpdate={h=>saveAjuste("precios",h)}/>}
       {loaded&&sec==="costos"&&<CostosVigentes costos={costos} onSave={saveCos} ajustes={ajustes.costos} onAjusteUpdate={h=>saveAjuste("costos",h)}/>}
       {loaded&&sec==="mejoras"&&<MejorasVigentes mejoras={mejoras||{}} onSave={saveMejoras}/>}
       {loaded&&sec==="osde"&&<OsdeVigentes osde={osde||{}} onSave={saveOsde} ajustes={ajustes.osde} onAjusteUpdate={h=>saveAjuste("osde",h)}/>}
