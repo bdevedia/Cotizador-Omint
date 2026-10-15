@@ -130,6 +130,29 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
   const chatEnd=useRef(null);
   useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[chat]);
 
+  // ── ZONA DE LA COTIZACIÓN ──
+  // Una sola zona por cotización: la elegida a mano o, si no, la que más se repite en la columna
+  // de zona de la nómina (AMBA si no hay). Planes y precios salen de esa zona.
+  const zonasEnNomina={};
+  if(emps&&map.zonaCol)emps.forEach(e=>{
+    const v=String(e[map.zonaCol]??"").trim().toLowerCase();
+    const z=ZONA_IDS.find(zi=>zi.toLowerCase()===v);
+    if(z)zonasEnNomina[z]=(zonasEnNomina[z]||0)+1;
+  });
+  const zonaDetectada=Object.entries(zonasEnNomina).sort((a,b)=>b[1]-a[1])[0]?.[0]||null;
+  const zonaCot=forcedZona||zonaDetectada||"AMBA";
+
+  // "✕ Cambiar": la próxima nómina arranca de cero
+  function resetCotizacion(){
+    setEmps(null);setMap({titAge:"",spAge:"",ku:"",k25:"",planCol:"",zonaCol:""});setForcedZona(null);
+    setPlanMapping({});setAdjPrices({});setAdjCostos({});setAjusteCostos({});setAdjPct({});
+    setEmpresa("");setChat([]);setChatIn("");setSaveMsg("");setAiLog([]);setScenarios({});
+    setNomErrors([]);setSpouseWarning(null);setDupWarning(null);setBrokerPct("");
+    setPlanMappingOsde({});setPlanMejoras({});setPlanCustomNames({});setPlanesSim([]);setVariantes([]);
+    setPlanADuplicar("");setBandaForzada("");
+    setSalidaCfg(c=>({...c,fecha:new Date().toISOString().split("T")[0],textoExtra:"",masaSalarial:""}));
+  }
+
   // ── BANDA DE CÁPITAS ──
   // La lista trae un precio por banda de cápitas (tamaño de la nómina). Se usa la banda que
   // corresponde a los socios de toda la nómina, salvo que se elija otra a mano.
@@ -221,12 +244,8 @@ function Cotizador({precios:preciosLista,preciosBandas,costos,osde,mejoras,onSav
     aplicarAjuste(r,{modo:"rango",cats});
   }
 
-  function getEmpZona(e){
-    if(forcedZona) return forcedZona;
-    const col=map.zonaCol;
-    if(col&&e[col]&&e[col].toString().trim()){const z=e[col].toString().trim();return ZONA_IDS.find(zi=>zi.toLowerCase()===z.toLowerCase())||"AMBA";}
-    return "AMBA";
-  }
+  // Una cotización es de una sola zona: todos los empleados se cotizan con sus planes y precios
+  function getEmpZona(){return zonaCot;}
 
   function buildGroups(){
     if(!emps||!map.titAge||!map.ku)return[];
@@ -585,15 +604,21 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
       </div>):(<div>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#D1FAE5",borderRadius:8,marginBottom:"1.25rem",border:"1px solid #A7F3D0"}}>
           <span>✅</span><span style={{fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{emps.length} empleados cargados</span>
-          <button onClick={()=>{setEmps(null);setMap({titAge:"",spAge:"",ku:"",k25:"",planCol:"",zonaCol:""});setPlanMapping({});setNomErrors([]);}} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",color:"#9CA3AF",fontFamily:FONT}}>✕ Cambiar</button>
+          <button onClick={resetCotizacion} style={{marginLeft:"auto",border:"none",background:"none",fontSize:12,cursor:"pointer",color:"#9CA3AF",fontFamily:FONT}}>✕ Cambiar</button>
         </div>
       </div>)}
 
-      {/* Zona buttons — always visible in step 1 */}
+      {/* Zona de la cotización: una sola por cotización */}
       <div style={{padding:"12px 16px",background:BLUE_LT,borderRadius:8,marginBottom:"1rem",border:`1px solid ${BORDER}`,marginTop:"0.75rem"}}>
-        <p style={{fontSize:12,color:BLUE,fontWeight:600,marginBottom:8,fontFamily:FONT}}>Forzar zona (opcional):</p>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z];const sel=forcedZona===z;return(<button key={z} onClick={()=>setForcedZona(sel?null:z)} style={{padding:"6px 14px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:sel?700:400,background:sel?zc2.c:"#fff",color:sel?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>{z}</button>);})}</div>
-        {forcedZona?<p style={{fontSize:11,color:BLUE,marginTop:6,fontFamily:FONT}}>Zona forzada: <strong>{forcedZona}</strong> (sobreescribe la columna del template)</p>:<p style={{fontSize:11,color:"#6B7280",marginTop:6,fontFamily:FONT}}>Sin forzar — se usará la columna de zona del template, o AMBA por defecto.</p>}
+        <p style={{fontSize:12,color:BLUE,fontWeight:600,marginBottom:8,fontFamily:FONT}}>Zona de la cotización</p>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}} role="radiogroup" aria-label="Zona de la cotización">{ZONA_IDS.map(z=>{const zc2=ZONA_COLORS[z];const sel=zonaCot===z;return(<button key={z} role="radio" aria-checked={sel} onClick={()=>setForcedZona(z===zonaDetectada?null:z)} style={{padding:"6px 14px",fontSize:13,fontFamily:FONT,borderRadius:8,cursor:"pointer",fontWeight:sel?700:400,background:sel?zc2.c:"#fff",color:sel?"#fff":zc2.c,border:`1.5px solid ${zc2.c}`}}>{z}</button>);})}</div>
+        <p style={{fontSize:11,color:"#4B5563",marginTop:6,fontFamily:FONT}}>
+          {!emps?"Se toma de la columna Zona de la nómina; si no viene, AMBA. Podés cambiarla.":
+            forcedZona?`Elegida a mano.${zonaDetectada?` En la nómina figura ${zonaDetectada}.`:""}`:
+            zonaDetectada?`Tomada de la nómina.`:"La nómina no indica zona: AMBA por defecto."}
+          {" "}Planes y precios son los de {zonaCot}.
+          {Object.keys(zonasEnNomina).length>1&&<strong style={{color:"#92400E"}}> La nómina tiene empleados en {Object.keys(zonasEnNomina).join(" y ")}: se cotiza toda en {zonaCot}.</strong>}
+        </p>
       </div>
       {/* Alertas de nómina */}
       {nomErrors.length>0&&<div style={{marginTop:"1rem",display:"flex",flexDirection:"column",gap:6}}>
@@ -633,13 +658,10 @@ Zonas disponibles: ${[...new Set(results.map(r=>r.zona))].join(", ")}`;
           :(<div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {opcionesCot.map(id=>{
               const sel=planesSim.includes(id);
-              const base=resolverCot(id).planId;
-              const zonasConPrecio=zonasOferta.filter(z=>precios?.[z]?.[base]);
               return(<label key={id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:8,cursor:"pointer",fontFamily:FONT,fontSize:13,
                 border:`1.5px solid ${sel?BLUE:BORDER}`,background:sel?BLUE_LT:"#fff",color:sel?BLUE:"#374151",fontWeight:sel?700:500}}>
                 <input type="checkbox" checked={sel} onChange={()=>setPlanesSim(prev=>sel?prev.filter(p=>p!==id):[...prev,id])}/>
                 {id}
-                <span style={{fontSize:10,color:"#9CA3AF",fontWeight:400}}>{zonasConPrecio.join(" · ")}</span>
               </label>);
             })}
           </div>)}
