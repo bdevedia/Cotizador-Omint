@@ -15,6 +15,14 @@ import Configuracion from "./components/Configuracion";
 
 const DEF_AJUSTES={precios:[],costos:[],osde:[]};
 
+// Si Firebase devuelve los precios sin las bandas de cápitas (por ejemplo, porque rechazó la
+// escritura), se conservan las que este navegador ya tenía guardadas
+function conBandasLocales(v){
+  if(!v||v._bandas)return v;
+  const locales=lsGet("omint-precios",null)?._bandas;
+  return locales?{...v,_bandas:locales}:v;
+}
+
 // ── APP SHELL ─────────────────────────────────────────────────────────────────
 function App(){
   const [sec,setSec]=useState("cotizador");
@@ -30,8 +38,9 @@ function App(){
 
   useEffect(()=>{
     (async()=>{
-      async function loadSync(fbKey,lsKey,setter,def={}){
-        const fbVal=await dbGet(fbKey,null);
+      async function loadSync(fbKey,lsKey,setter,def={},ajustar=v=>v){
+        const fbRaw=await dbGet(fbKey,null);
+        const fbVal=fbRaw!==null?ajustar(fbRaw):null;
         if(fbVal!==null){setter(fbVal);lsSet(lsKey,fbVal);}
         else{const lsVal=lsGet(lsKey,def);setter(lsVal);if(JSON.stringify(lsVal)!==JSON.stringify(def))dbSet(fbKey,lsVal);}
       }
@@ -40,7 +49,7 @@ function App(){
       else{const lsQ=lsGet("omint-quotes",[]);setQuotes(lsQ);if(lsQ.length>0)dbSet("quotes",lsQ);}
 
       await Promise.all([
-        loadSync("precios","omint-precios",setPrecios),
+        loadSync("precios","omint-precios",setPrecios,{},conBandasLocales),
         loadSync("costos","omint-costos",setCostos),
         loadSync("osde","omint-osde",setOsde),
         loadSync("mejoras","omint-mejoras",setMejoras),
@@ -48,7 +57,7 @@ function App(){
       ]);
       setApiKey(lsGet("omint-apikey",""));
       setLoaded(true);
-      dbSubscribe("precios",v=>{setPrecios(v||{});lsSet("omint-precios",v||{});});
+      dbSubscribe("precios",v=>{const p=conBandasLocales(v||{});setPrecios(p);lsSet("omint-precios",p);});
       dbSubscribe("costos",v=>{setCostos(v||{});lsSet("omint-costos",v||{});});
       dbSubscribe("osde",v=>{setOsde(v||{});lsSet("omint-osde",v||{});});
       dbSubscribe("mejoras",v=>{setMejoras(v||{});lsSet("omint-mejoras",v||{});});
@@ -57,7 +66,8 @@ function App(){
     })();
   },[]);
 
-  async function sync(fn){setSyncStatus("syncing");try{await fn();setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);}catch(e){console.warn("Firebase sync error:",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);}}
+  // Devuelve el mensaje de error de Firebase, o null si se guardó bien
+  async function sync(fn){setSyncStatus("syncing");try{await fn();setSyncStatus("ok");setTimeout(()=>setSyncStatus("idle"),2000);return null;}catch(e){console.warn("Firebase sync error:",e);setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);return String(e?.message||e);}}
   // Las bandas de cápitas viajan dentro de "precios" (precios._bandas): así se guardan en la
   // misma clave de Firebase que ya tiene permisos. Sin bandas nuevas se conservan las que había.
   async function savePre(p,bandas){
@@ -72,7 +82,7 @@ function App(){
       }))]));
     }
     if(b&&Object.keys(b).length)full._bandas=b;
-    setPrecios(full);lsSet("omint-precios",full);sync(()=>dbSet("precios",full));
+    setPrecios(full);lsSet("omint-precios",full);return sync(()=>dbSet("precios",full));
   }
   async function saveCos(c){setCostos(c);lsSet("omint-costos",c);sync(()=>dbSet("costos",c));}
   async function saveOsde(o){setOsde(o);lsSet("omint-osde",o);sync(()=>dbSet("osde",o));}

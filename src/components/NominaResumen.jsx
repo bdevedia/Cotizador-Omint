@@ -49,6 +49,9 @@ function NominaResumen({emps,map,getEmpZona,isSim,banda}){
         {k.d&&<p style={{fontSize:11,color:"#6B7280",fontFamily:FONT}}>{k.d}</p>}
       </div>))}
     </div>
+    {banda&&!banda.disponibles?.length&&<div style={{padding:"10px 12px",borderRadius:10,marginBottom:16,fontSize:12,fontFamily:FONT,background:"#FEF3C7",color:"#92400E",border:"1px solid #FDE68A"}}>
+      No hay bandas de cápitas cargadas: se usan los precios de la banda 200-499. Volvé a importar la lista de precios en "Importar datos" para que se use la banda que corresponde a la nómina.
+    </div>}
     {banda?.disponibles?.length>0&&<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:`1px solid ${BORDER}`,marginBottom:16}}>
       <label htmlFor="banda-precios" style={{fontSize:13,fontWeight:600,color:"#374151",fontFamily:FONT}}>Banda de precios</label>
       <select id="banda-precios" value={banda.forzada} onChange={e=>banda.setForzada(e.target.value)} style={{...inp,width:"auto",minWidth:220}}>
