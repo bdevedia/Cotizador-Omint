@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import "./App.css";
 import { dbGet, dbSet, dbSubscribe } from "./firebase";
 import { lsGet, lsSet } from "./db";
 import { FONT, BLUE, BLUE_LT, BORDER, GRAY, OMINT_LOGO } from "./constants";
@@ -63,7 +62,15 @@ function App(){
   // misma clave de Firebase que ya tiene permisos. Sin bandas nuevas se conservan las que había.
   async function savePre(p,bandas){
     const full={...p};delete full._bandas;
-    const b=bandas!==undefined?bandas:precios?._bandas;
+    let b=bandas;
+    if(b===undefined&&precios?._bandas){
+      // Edición en Precios Vigentes: lo editado es la banda 200-499, así que se copia a esa banda
+      // (la cotización toma los precios de las bandas cuando el plan las tiene)
+      b=Object.fromEntries(Object.entries(precios._bandas).map(([z,planes])=>[z,Object.fromEntries(Object.entries(planes||{}).map(([pl,bs])=>{
+        const l200=Object.keys(bs||{}).find(l=>l.includes("200"));
+        return[pl,l200&&full[z]?.[pl]?{...bs,[l200]:full[z][pl]}:bs];
+      }))]));
+    }
     if(b&&Object.keys(b).length)full._bandas=b;
     setPrecios(full);lsSet("omint-precios",full);sync(()=>dbSet("precios",full));
   }

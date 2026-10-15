@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { FONT, BLUE, BORDER, OSDE_CATS, EMPTY_OSDE } from "../constants";
-import { btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
+import { FONT, BLUE, OSDE_CATS, EMPTY_OSDE } from "../constants";
+import { btnP, btnS, inp, numInp, card, TD } from "../styles";
 import { parseOsdeFile, downloadOsdeTemplate } from "../parsers";
 import AjusteHistorial from "./AjusteHistorial";
 
@@ -92,6 +92,5 @@ function OsdeVigentes({osde,onSave,ajustes=[],onAjusteUpdate}){
   />
   </div>);
 }
-
 
 export default OsdeVigentes;

@@ -21,8 +21,6 @@ try {
   console.warn("Firebase no configurado, usando localStorage.", e);
 }
 
-export const firebaseEnabled = !!db;
-
 export async function dbGet(key, def = null) {
   if (!db) return def;
   try {

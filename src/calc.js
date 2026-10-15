@@ -1,18 +1,16 @@
-import { CATS, CAT_IDS, EMPTY_CATS, OSDE_CATS, EMPTY_OSDE } from "./constants";
+import { CATS, EMPTY_CATS, OSDE_CATS, EMPTY_OSDE } from "./constants";
 import { catAge, planTier } from "./utils";
 
 // ── CALC BD ───────────────────────────────────────────────────────────────────
 function calcBD(emps,map,prices,costos){
   const c={...EMPTY_CATS};
-  let validTits=0;
   emps.forEach(e=>{
-    const ta=parseInt(e[map.titAge]);if(!isNaN(ta)){c[catAge(ta)]++;validTits++;}
+    const ta=parseInt(e[map.titAge]);if(!isNaN(ta))c[catAge(ta)]++;
     if(map.spAge){const sa=parseInt(e[map.spAge]);if(!isNaN(sa)&&sa>0)c[catAge(sa)]++;}
     const ku=parseInt(e[map.ku])||0;if(ku>=1)c.h1++;if(ku>=2)c.h2plus+=(ku-1);
     // Hijos >25: cada uno cuenta en su categoría de edad (FAC)
     const facEdades=map.k25?e[map.k25]:null;
-    if(Array.isArray(facEdades)){facEdades.forEach(edad=>{c[catAge(edad)]++;});}
-    else if(facEdades){const n=parseInt(facEdades)||0;if(n>0)c.s0_25+=n;} // fallback legacy
+    if(Array.isArray(facEdades))facEdades.forEach(edad=>{c[catAge(edad)]++;});
   });
   const rows=CATS.map(x=>{
     const n=c[x.id],pr=prices[x.id]||0,ct=costos[x.id]||0;
@@ -20,8 +18,7 @@ function calcBD(emps,map,prices,costos){
     return{...x,count:n,precio:pr,costo:ct,fac,cos,cf};
   });
   const tf=rows.reduce((a,r)=>a+r.fac,0),tc=rows.reduce((a,r)=>a+r.cos,0);
-  const skipped=emps.length-validTits;
-  return{rows,totalFac:tf,totalCosto:tc,cfTotal:tf>0?tc/tf*100:0,totalSocios:emps.length,skipped};
+  return{rows,totalFac:tf,totalCosto:tc,cfTotal:tf>0?tc/tf*100:0,totalSocios:emps.length};
 }
 
 // ── MULTIPLICADOR DE AJUSTES ─────────────────────────────────────────────────

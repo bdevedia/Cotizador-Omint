@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FONT, BLUE, BLUE_LT, BORDER, CATS, CAT_IDS } from "../constants";
+import { FONT, BLUE, BLUE_LT, BORDER, CATS, CAT_IDS, RANGO } from "../constants";
 import { pctAjuste } from "../calc";
 
 // Porcentaje editable: guarda un borrador mientras se escribe y aplica al salir o con Enter
@@ -25,7 +25,6 @@ function PctInput({value,onCommit,label}){
   </label>);
 }
 
-const RANGO_LABEL={s0_25:"00-25",s26_34:"26-35",s35_54:"36-54",s55_59:"55-59",s60plus:"60+",h1:"Hijo 1",h2plus:"Hijo 2+"};
 
 // ── AJUSTE DE PRECIOS DE UN PLAN ──────────────────────────────────────────────
 // adj: {modo:"rango059",pct059,pct60} | {modo:"rango",cats:{...}} — onChange(nuevoAdj)
@@ -56,11 +55,12 @@ function AjustePrecios({adj,onChange}){
       <PctInput label="0-59" value={adj?.pct059||0} onCommit={v=>onChange({modo:"rango059",pct059:v,pct60:adj?.pct60||0})}/>
       <PctInput label="60+" value={adj?.pct60||0} onCommit={v=>onChange({modo:"rango059",pct059:adj?.pct059||0,pct60:v})}/>
     </>):CATS.map(c=>(
-      <PctInput key={c.id} label={RANGO_LABEL[c.id]} value={adj?.cats?.[c.id]||0}
+      <PctInput key={c.id} label={RANGO[c.id]} value={adj?.cats?.[c.id]||0}
         onCommit={v=>onChange({modo:"rango",cats:{...(adj?.cats||{}),[c.id]:v}})}/>
     ))}
     <span style={{fontSize:11,color:"#6B7280",fontFamily:FONT,flexBasis:"100%"}}>Sobre el precio de lista. Ej: -10 baja 10%. También podés escribir el precio en la tabla.</span>
   </div>);
 }
 
+export { PctInput };
 export default AjustePrecios;

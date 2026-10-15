@@ -144,4 +144,4 @@ function exportNominaValorizadaXLS(results,empresa,planesNombres,fecha,formato="
   XLSX.writeFile(wb,archivo);
 }
 
-export { exportNominaValorizadaXLS, precioFamilia, precioFamiliaCapitado };
+export { exportNominaValorizadaXLS };

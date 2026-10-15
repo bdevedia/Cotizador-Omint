@@ -30,7 +30,6 @@ const OSDE_CATS=[
   {id:"hijo2plus", label:"2do Hijo o más (<28 años)"},
 ];
 const EMPTY_OSDE=Object.fromEntries(OSDE_CATS.map(c=>[c.id,0]));
-const BANDA="200-499"; // siempre fijo
 const PRECIO_COLS=[1,2,3,4,5,7,8]; // columnas en el XLS de precios
 
 const MEJORAS_DEF=[
@@ -42,11 +41,13 @@ const MEJORAS_DEF=[
   {id:"copagos",    label:"Copagos",         type:"cats"},
   {id:"checkup",    label:"Check Up Anual",  type:"pmpm"},
 ];
+// Rótulo corto de cada rango (encabezados de tablas)
+const RANGO={s0_25:"00-25",s26_34:"26-35",s35_54:"36-54",s55_59:"55-59",s60plus:"60+",h1:"Hijo 1",h2plus:"Hijo 2+"};
 const EMPTY_MEJORAS={farmacia:{},optica:{},ortodoncia:{},pyt:{},oa:{},copagos:{},checkup:{}};
 
 export { OMINT_LOGO, FONT, BLUE, BLUE_LT, BORDER, GRAY,
   CATS, CAT_IDS, EMPTY_CATS,
   ZONA_IDS, ZONA_COLORS,
   OSDE_CATS, EMPTY_OSDE,
-  BANDA, PRECIO_COLS,
+  RANGO, PRECIO_COLS,
   MEJORAS_DEF, EMPTY_MEJORAS };

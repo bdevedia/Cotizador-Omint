@@ -1,16 +1,15 @@
 import { useState, Fragment } from "react";
-import { FONT, BLUE, BLUE_LT, BORDER, GRAY, CATS, CAT_IDS, ZONA_COLORS, MEJORAS_DEF } from "../constants";
+import { FONT, BLUE, BLUE_LT, BORDER, GRAY, CATS, CAT_IDS, ZONA_COLORS, MEJORAS_DEF, RANGO } from "../constants";
 import { cfColor, cfBg, fmt } from "../utils";
 import { badge, btnP, btnS, inp, numInp, card, TH, TD } from "../styles";
 import { pctAjuste, capitado059, calcOsdeFromEmps, planOsdeDe } from "../calc";
-import AjustePrecios from "./AjustePrecios";
+import AjustePrecios, { PctInput } from "./AjustePrecios";
 
 // ── PLANILLA DE COTIZACIÓN (paso 3) ───────────────────────────────────────────
 // Misma estructura que el Excel de análisis: Distribución, Precios, Costos y Resultado,
 // con todos los planes en filas para compararlos. Herramientas (IA, escenarios, alertas)
 // en un panel lateral.
 
-const RANGO={s0_25:"00-25",s26_34:"26-35",s35_54:"36-54",s55_59:"55-59",s60plus:"60+",h1:"Hijo 1",h2plus:"Hijo 2+"};
 const HEAD_SECCION={margin:0,padding:"10px 16px",fontSize:13,fontWeight:700,color:"#fff",background:"#17375E",fontFamily:FONT,letterSpacing:"0.02em"};
 const fmt0=n=>Math.round(+n||0).toLocaleString("es-AR");
 const fmtPct=v=>`${v>0?"+":v<0?"−":""}${Math.abs(Math.round(v*1000)/10).toString().replace(".",",")}%`;
@@ -37,7 +36,7 @@ function Seccion({titulo,extra,children}){
 function Planilla(props){
   const {results,isSim,multiSim,simTotals,emps,grandFac,grandCosto,grandCF,inversions,
     precios,mejoras,osde,
-    adjPct,adjPrices,adjCostos,setAdjCostos,aplicarAjuste,setPrecioManual,
+    adjPct,adjPrices,adjCostos,setAdjCostos,ajusteCostos,setAjusteCostos,aplicarAjuste,setPrecioManual,
     setPlanMejoras,planCustomNames,
     brokerPct,setBrokerPct,planMappingOsde,
     empresa,setEmpresa,knownEmpresas,
@@ -48,6 +47,24 @@ function Planilla(props){
   const [showSug,setShowSug]=useState(false);
   const [ajusteAbierto,setAjusteAbierto]=useState(null); // adjKey con el editor de ajuste abierto
   const [mejorasAbierto,setMejorasAbierto]=useState(null); // adjKey con el editor de mejoras abierto
+  const [ajCostoAbierto,setAjCostoAbierto]=useState(null); // adjKey con el editor de ajuste de costos abierto
+  // Ajuste de costos de un plan: % a todos los rangos y/o $ por rango. Si queda en 0, se borra.
+  function setAjCosto(adjKey,cambio){
+    setAjusteCostos(prev=>{
+      const cur=prev[adjKey]||{};
+      const nuevo={...cur,...cambio,cats:{...(cur.cats||{}),...(cambio.cats||{})}};
+      const vacio=!nuevo.pct&&!CAT_IDS.some(id=>nuevo.cats[id]);
+      const {[adjKey]:_omit,...resto}=prev;
+      return vacio?resto:{...prev,[adjKey]:nuevo};
+    });
+  }
+  const resumenAjCosto=a=>{
+    if(!a)return null;
+    const partes=[];
+    if(a.pct)partes.push(`${a.pct>0?"+":""}${(a.pct*100).toFixed(1).replace(".",",").replace(",0","")}% todos`);
+    if(CAT_IDS.some(id=>a.cats?.[id]))partes.push("$ por rango");
+    return partes.length?partes.join(" · "):null;
+  };
 
   if(results.length===0)return(<div style={{...card(),textAlign:"center",padding:"3rem",color:"#6B7280"}}>
     <p style={{fontFamily:FONT}}>No hay empleados mapeados a ningún plan Omint.</p>
@@ -90,7 +107,7 @@ function Planilla(props){
   const th=(x={})=>TH({padding:"8px 6px",...x});
   const td=(x={})=>TD({padding:"6px 6px",...x});
   const thL=th({textAlign:"left"});
-  const hayAjustes=Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0;
+  const hayAjustes=Object.keys(adjPrices).length>0||Object.keys(adjCostos).length>0||Object.keys(ajusteCostos).length>0;
   const sugerencias=knownEmpresas.filter(e=>e.toLowerCase().includes(empresa.toLowerCase())&&e.toLowerCase()!==empresa.toLowerCase());
 
   return(<div style={{display:"flex",flexDirection:"column",gap:16,textAlign:"left"}}>
@@ -105,10 +122,10 @@ function Planilla(props){
       </div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginLeft:"auto"}}>
         <button onClick={onVolver} style={btnS}>← Volver</button>
-        {hayAjustes&&<button onClick={()=>{setAdjPrices({});setAdjPct({});setAdjCostos({});}} style={btnS}>↺ Resetear ajustes</button>}
+        {hayAjustes&&<button onClick={()=>{setAdjPrices({});setAdjPct({});setAdjCostos({});setAjusteCostos({});}} style={btnS}>↺ Resetear ajustes</button>}
         <button onClick={()=>guardar("abierto")} style={btnS}>Guardar abierto</button>
         <button onClick={()=>guardar("cerrado")} style={btnS}>Guardar cerrado</button>
-        <button onClick={onExportar} style={btnP}>Exportar →</button>
+        <button onClick={onExportar} style={btnP}>Salidas →</button>
       </div>
     </div>
     {saveMsg&&<div style={{padding:"10px 16px",background:"#D1FAE5",borderRadius:8,fontSize:13,color:"#065F46",fontWeight:600,fontFamily:FONT}}>{saveMsg}</div>}
@@ -142,8 +159,8 @@ function Planilla(props){
         <div style={card({padding:16})}>
           <p style={{fontSize:11,fontWeight:700,color:"#4B5A9E",textTransform:"uppercase",letterSpacing:"0.05em",fontFamily:FONT,marginBottom:10}}>Escenarios</p>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {Object.keys(scenarios).map(n=><button key={n} onClick={()=>{setAdjPrices(scenarios[n].adjPrices);setAdjCostos(scenarios[n].adjCostos);setAdjPct(scenarios[n].adjPct||{});}} style={{fontSize:12,padding:"6px 12px",borderRadius:20,border:`1px solid ${BLUE}`,background:"#fff",color:BLUE,cursor:"pointer",fontFamily:FONT}}>{n}</button>)}
-            {hayAjustes&&<button onClick={()=>{const n=prompt("Nombre del escenario:");if(n?.trim()){const k=n.trim();if(scenarios[k]&&!confirm(`Ya existe el escenario "${k}". ¿Sobreescribir?`))return;setScenarios(p=>({...p,[k]:{adjPrices:{...adjPrices},adjCostos:{...adjCostos},adjPct:{...adjPct}}}));}}} style={{fontSize:12,padding:"6px 12px",borderRadius:20,border:"1px dashed #9CA3AF",background:"#fff",color:"#4B5563",cursor:"pointer",fontFamily:FONT}}>+ Guardar actual</button>}
+            {Object.keys(scenarios).map(n=><button key={n} onClick={()=>{setAdjPrices(scenarios[n].adjPrices);setAdjCostos(scenarios[n].adjCostos);setAdjPct(scenarios[n].adjPct||{});setAjusteCostos(scenarios[n].ajusteCostos||{});}} style={{fontSize:12,padding:"6px 12px",borderRadius:20,border:`1px solid ${BLUE}`,background:"#fff",color:BLUE,cursor:"pointer",fontFamily:FONT}}>{n}</button>)}
+            {hayAjustes&&<button onClick={()=>{const n=prompt("Nombre del escenario:");if(n?.trim()){const k=n.trim();if(scenarios[k]&&!confirm(`Ya existe el escenario "${k}". ¿Sobreescribir?`))return;setScenarios(p=>({...p,[k]:{adjPrices:{...adjPrices},adjCostos:{...adjCostos},adjPct:{...adjPct},ajusteCostos:{...ajusteCostos}}}));}}} style={{fontSize:12,padding:"6px 12px",borderRadius:20,border:"1px dashed #9CA3AF",background:"#fff",color:"#4B5563",cursor:"pointer",fontFamily:FONT}}>+ Guardar actual</button>}
           </div>
           {Object.keys(scenarios).length===0&&!hayAjustes&&<p style={{fontSize:12,color:"#6B7280",fontFamily:FONT}}>Ajustá precios y guardá el estado como escenario para comparar.</p>}
         </div>
@@ -156,8 +173,7 @@ function Planilla(props){
             {inversions.length>0
               ?inversions.map((v,i)=><p key={i} style={{color:"#B42318"}}>Precio invertido en {v.zona} · {v.cat}: {v.plan1} (${fmt0(v.price1)}) es más caro que {v.plan2} (${fmt0(v.price2)}).</p>)
               :<p style={{color:"#374151"}}>Sin precios invertidos entre planes.</p>}
-            {results.some(r=>r.bd.skipped>0)&&<p style={{color:"#92400E"}}>Hay filas sin edad válida que no se cotizaron.</p>}
-          </div>
+                      </div>
         </div>
 
         {aiLog.length>0&&(<div style={card({padding:16})}>
@@ -234,17 +250,20 @@ function Planilla(props){
         </Seccion>
 
         {/* 3 · COSTOS */}
-        <Seccion titulo="3 · Costos (lista + mejoras + comisión)" extra={
+        <Seccion titulo="3 · Costos (lista + ajuste + mejoras + comisión)" extra={
           <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#fff",fontFamily:FONT}}>Comisión broker
             <input type="number" min="0" max="100" className="sin-flechas" value={brokerPct} onChange={e=>setBrokerPct(e.target.value)} placeholder="0" style={{...numInp(64),fontSize:13}}/> %
           </label>}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:860}}>
-            <thead><tr><th style={thL}>Plan</th>{CATS.map(c=><th key={c.id} style={th()}>{RANGO[c.id]}</th>)}<th style={thL}>Mejoras</th></tr></thead>
+            <thead><tr><th style={thL}>Plan</th>{CATS.map(c=><th key={c.id} style={th()}>{RANGO[c.id]}</th>)}<th style={thL}>Ajuste</th><th style={thL}>Mejoras</th></tr></thead>
             <tbody>
               {planes.map(pl=>{
                 const opcionesMej=MEJORAS_DEF.filter(m=>Object.keys((mejoras||{})[m.id]||{}).length>0);
                 const elegidas=MEJORAS_DEF.filter(m=>pl.mejSel[m.id]).map(m=>`${m.label} ${pl.mejSel[m.id]}`);
                 const abierto=mejorasAbierto===pl.adjKey;
+                const ajAbierto=ajCostoAbierto===pl.adjKey;
+                const aj=ajusteCostos[pl.adjKey];
+                const ajResumen=resumenAjCosto(aj);
                 return(<Fragment key={pl.adjKey}>
                   <tr>
                     <td style={td({fontWeight:700,color:BLUE,whiteSpace:"nowrap"})}>{zonaBadge(pl.zona)}{nombre(pl)}</td>
@@ -258,6 +277,12 @@ function Planilla(props){
                       </td>);
                     })}
                     <td style={td({whiteSpace:"nowrap"})}>
+                      <button onClick={()=>setAjCostoAbierto(ajAbierto?null:pl.adjKey)} aria-expanded={ajAbierto}
+                        style={{fontSize:12,fontFamily:FONT,padding:"5px 10px",borderRadius:6,cursor:"pointer",border:`1px solid ${ajResumen?"#7C3AED":BORDER}`,background:ajResumen?"#F3E8FF":"#fff",color:ajResumen?"#5B21B6":"#4B5563",fontWeight:ajResumen?600:400}}>
+                        {ajResumen||"Sin ajuste"} {ajAbierto?"▲":"▼"}
+                      </button>
+                    </td>
+                    <td style={td({whiteSpace:"nowrap"})}>
                       {opcionesMej.length===0?<span style={{fontSize:12,color:"#6B7280"}}>Sin mejoras cargadas</span>:(
                         <button onClick={()=>setMejorasAbierto(abierto?null:pl.adjKey)} aria-expanded={abierto}
                           style={{fontSize:12,fontFamily:FONT,padding:"5px 10px",borderRadius:6,cursor:"pointer",border:`1px solid ${elegidas.length?"#16A34A":BORDER}`,background:elegidas.length?"#F0FDF4":"#fff",color:elegidas.length?"#166534":"#4B5563",fontWeight:elegidas.length?600:400}}>
@@ -265,7 +290,20 @@ function Planilla(props){
                         </button>)}
                     </td>
                   </tr>
-                  {abierto&&<tr><td colSpan={9} style={{padding:"4px 8px 8px"}}>
+                  {ajAbierto&&<tr><td colSpan={10} style={{padding:"4px 8px 8px"}}>
+                    <div style={{display:"flex",flexWrap:"wrap",alignItems:"flex-end",gap:14,padding:"10px 14px",background:"#FAF5FF",border:"1px solid #E9D5FF",borderRadius:8}}>
+                      <PctInput label="Todos los rangos" value={aj?.pct||0} onCommit={v=>setAjCosto(pl.adjKey,{pct:v})}/>
+                      <span style={{fontSize:12,color:"#6B7280",fontFamily:FONT,alignSelf:"center"}}>y/o $ por rango:</span>
+                      {CATS.map(c=>(<label key={c.id} style={{display:"flex",flexDirection:"column",gap:3,fontSize:10.5,color:"#6B7280",fontFamily:FONT,fontWeight:600}}>
+                        {RANGO[c.id]}
+                        <input type="number" className="sin-flechas" value={aj?.cats?.[c.id]||""} placeholder="0"
+                          onChange={e=>setAjCosto(pl.adjKey,{cats:{[c.id]:parseFloat(e.target.value)||0}})}
+                          aria-label={`Ajuste de costo ${RANGO[c.id]} ${nombre(pl)}`} style={{...numInp(74,!!aj?.cats?.[c.id]),fontSize:12}}/>
+                      </label>))}
+                      <p style={{flexBasis:"100%",fontSize:11,color:"#6B7280",fontFamily:FONT}}>Costo de cada rango = lista × (1 + %) + $ del rango + mejoras, y sobre eso la comisión.</p>
+                    </div>
+                  </td></tr>}
+                  {abierto&&<tr><td colSpan={10} style={{padding:"4px 8px 8px"}}>
                     <div style={{display:"flex",flexWrap:"wrap",gap:16,padding:"10px 14px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8}}>
                       {opcionesMej.map(m=>{
                         const options=Object.keys(mejoras[m.id]);
@@ -289,7 +327,7 @@ function Planilla(props){
         </Seccion>
 
         {/* 4 · RESULTADO */}
-        <Seccion titulo="4 · Resultado" extra={<span style={{fontSize:12,color:"#D6DCF5",fontFamily:FONT}}>El nombre{hayOsde?" y el plan OSDE":""} se cambian en el paso 2</span>}>
+        <Seccion titulo="4 · Resultado" extra={<span style={{fontSize:12,color:"#D6DCF5",fontFamily:FONT}}>{hayOsde?"El nombre y el plan OSDE se cambian":"El nombre se cambia"} en el paso 2</span>}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:hayOsde?960:720}}>
             <thead><tr>
               {!isSim&&<th style={thL}>Plan vigente</th>}

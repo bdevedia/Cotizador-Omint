@@ -1,4 +1,4 @@
-import { FONT, BLUE, BLUE_LT, BORDER, CATS, CAT_IDS, ZONA_COLORS } from "../constants";
+import { FONT, BLUE, BLUE_LT, BORDER, CATS, CAT_IDS, ZONA_COLORS, RANGO } from "../constants";
 import { TH, TD, badge, card, inp } from "../styles";
 import { calcBD } from "../calc";
 
@@ -8,7 +8,6 @@ import { calcBD } from "../calc";
 
 // Los rótulos de la lista ya suelen decir "cápitas"
 const conCapitas=l=>/c[aá]pita/i.test(l)?l:`${l} cápitas`;
-const RANGO={s0_25:"00-25",s26_34:"26-35",s35_54:"36-54",s55_59:"55-59",s60plus:"60+",h1:"Hijo 1",h2plus:"Hijo 2+"};
 
 function NominaResumen({emps,map,getEmpZona,isSim,banda}){
   // Filas: por zona y, en equivalencias, por plan vigente

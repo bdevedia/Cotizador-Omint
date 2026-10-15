@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FONT, BLUE, BORDER } from "../constants";
+import { FONT, BLUE } from "../constants";
 import { btnP, inp, card } from "../styles";
 
 // ── CONFIGURACIÓN ─────────────────────────────────────────────────────────────
@@ -15,6 +15,5 @@ function Configuracion({apiKey,onSave}){
     </div>
   </div>);
 }
-
 
 export default Configuracion;

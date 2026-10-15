@@ -1,5 +1,5 @@
 import { useState, Fragment } from "react";
-import { FONT, BLUE, BLUE_LT, BORDER, GRAY, ZONA_COLORS } from "../constants";
+import { FONT, BLUE, BLUE_LT, BORDER, GRAY } from "../constants";
 import { fmt, fmtD, cfColor, cfBg } from "../utils";
 import { badge, card, TH, TD } from "../styles";
 
@@ -128,6 +128,5 @@ function Historial({quotes,onUpdate,onDelete,onRenameEmpresa}){
     </div>
   </div>);
 }
-
 
 export default Historial;
