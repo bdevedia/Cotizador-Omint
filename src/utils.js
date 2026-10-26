@@ -8,4 +8,11 @@ function planTier(id){const m=String(id).match(/^(\d+)/);return m?parseInt(m[1])
 // Formato de precio igual al PDF: $ 138.826 (punto de miles, sin decimales)
 function fmtPDF(n){return"$ "+(Math.round(+n)).toLocaleString("es-AR");}
 
-export { catAge, cfColor, cfBg, fmt, planTier, fmtPDF };
+// Mes de vigencia de la propuesta: el elegido en Salidas ("2026-11") o, si no, el de la fecha.
+// Devuelve una fecha "AAAA-MM-DD" para los que arman el texto del mes.
+function fechaVigencia(cfg){
+  if(/^\d{4}-\d{2}$/.test(cfg?.vigencia||""))return`${cfg.vigencia}-01`;
+  return cfg?.fecha||new Date().toISOString().split("T")[0];
+}
+
+export { fechaVigencia, catAge, cfColor, cfBg, fmt, planTier, fmtPDF };

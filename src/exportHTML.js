@@ -1,5 +1,5 @@
 import { OMINT_LOGO_WHITE } from "./logoWhite";
-import { fmtPDF } from "./utils";
+import { fmtPDF, fechaVigencia } from "./utils";
 import { capitado054, capitado059 } from "./calc";
 
 // ── PROPUESTA ECONÓMICA (PDF) ─────────────────────────────────────────────────
@@ -30,7 +30,7 @@ function planHTML(nombre){
 function precio(r,id){return r.bd.rows.find(x=>x.id===id)?.precio||0;}
 
 function generateProposalHTML(cfg,results){
-  const {empresa,fecha,validez,formato,planesNombres,textoExtra}=cfg;
+  const {empresa,validez,formato,planesNombres,textoExtra}=cfg;
   const capitados=formato==="capitados"||formato==="capitados2";
 
   // Un renglón por plan cotizado (la cotización es de una sola zona)
@@ -139,7 +139,7 @@ function generateProposalHTML(cfg,results){
     <div class="who">
       <p class="kicker">Cotizaci&oacute;n &middot; Planes corporativos</p>
       <p class="empresa">${esc(empresa||"—")}</p>
-      <p class="vig">${vigencia(fecha)}</p>
+      <p class="vig">${vigencia(fechaVigencia(cfg))}</p>
     </div>
   </div>
   <div class="rule"></div>
