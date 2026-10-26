@@ -1,5 +1,6 @@
 import { FONT, BLUE, BLUE_LT, BORDER, ZONA_COLORS } from "../constants";
 import { badge, btnP, btnS, inp, card } from "../styles";
+import { fechaVigencia } from "../utils";
 import { generateProposalHTML, abrirPropuestaPDF } from "../exportHTML";
 import { exportNominaValorizadaXLS } from "../exportNominaValorizada";
 import { exportAnalisisXLS } from "../exportXLS";
@@ -41,7 +42,7 @@ function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,plan
     catch(e){alert("Error al exportar el Excel: "+e.message);}
   }
   function descargarValorizada(){
-    try{exportNominaValorizadaXLS(results,empresa,planesNombres,cfg.fecha,cfg.formato);}
+    try{exportNominaValorizadaXLS(results,empresa,planesNombres,fechaVigencia(cfg),cfg.formato);}
     catch(e){alert("Error al exportar la nómina valorizada: "+e.message);}
   }
 
@@ -89,15 +90,19 @@ function Salidas({results,empresa,setEmpresa,cfg,setCfg,emps,brokerPct,osde,plan
             <label htmlFor="sal-empresa" style={lbl}>Empresa</label>
             <input id="sal-empresa" value={empresa} onChange={e=>setEmpresa(e.target.value)} placeholder="Nombre de la empresa" style={inp}/>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,2fr)",gap:12}}>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:12}}>
             <div>
               <label htmlFor="sal-fecha" style={lbl}>Fecha</label>
               <input id="sal-fecha" type="date" value={cfg.fecha} onChange={e=>upd("fecha",e.target.value)} style={inp}/>
             </div>
             <div>
-              <label htmlFor="sal-validez" style={lbl}>Validez</label>
-              <input id="sal-validez" value={cfg.validez} onChange={e=>upd("validez",e.target.value)} style={inp}/>
+              <label htmlFor="sal-vigencia" style={lbl}>Vigencia <span style={{fontWeight:400,textTransform:"none",letterSpacing:0,color:"#6B7280"}}>(mes del PDF)</span></label>
+              <input id="sal-vigencia" type="month" value={fechaVigencia(cfg).slice(0,7)} onChange={e=>upd("vigencia",e.target.value)} style={inp}/>
             </div>
+          </div>
+          <div>
+            <label htmlFor="sal-validez" style={lbl}>Validez</label>
+            <input id="sal-validez" value={cfg.validez} onChange={e=>upd("validez",e.target.value)} style={inp}/>
           </div>
           <div>
             <p style={lbl}>Nombre de los planes en la propuesta</p>

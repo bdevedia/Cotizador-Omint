@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx-js-style";
 import { parseNominaFija, MAP_NOMINA } from "./parsers";
+import { fechaVigencia } from "./utils";
 import { construirResultados } from "./cotizacion";
 import { generateProposalHTML, abrirPropuestaPDF } from "./exportHTML";
 import { exportAnalisisXLS } from "./exportXLS";
@@ -40,7 +41,7 @@ function descargarExcelGuardado(q){
 }
 function descargarValorizadaGuardada(q){
   const {e,results,planesNombres}=armar(q);
-  exportNominaValorizadaXLS(results,e.empresa,planesNombres,e.salidaCfg?.fecha,e.salidaCfg?.formato);
+  exportNominaValorizadaXLS(results,e.empresa,planesNombres,fechaVigencia(e.salidaCfg),e.salidaCfg?.formato);
 }
 function descargarNominaOriginal(q){
   const d=leerCotizacion(q);
